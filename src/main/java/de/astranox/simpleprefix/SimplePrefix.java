@@ -5,7 +5,6 @@ import de.astranox.simpleprefix.handlers.ConfigWatcher;
 import de.astranox.simpleprefix.handlers.LuckPermsEventHandler;
 import de.astranox.simpleprefix.handlers.PlayerJoinHandler;
 import de.astranox.simpleprefix.managers.*;
-import de.syntaxjasom.simplePrefix.managers.*;
 import io.papermc.paper.command.brigadier.Commands;
 import io.papermc.paper.plugin.lifecycle.event.LifecycleEventManager;
 import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents;
