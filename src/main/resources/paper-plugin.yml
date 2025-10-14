@@ -1,0 +1,31 @@
+name: SimplePrefix
+version: '1.0-EXPERIMENTAL'
+main: de.syntaxjasom.simplePrefix.SimplePrefix
+api-version: '1.21'
+folia-supported: true
+
+dependencies:
+  server:
+    LuckPerms:
+      load: BEFORE
+      required: true
+
+permissions:
+  simpleprefix.use:
+    default: true
+  simpleprefix.reload:
+    default: op
+  simpleprefix.update:
+    default: op
+  simpleprefix.list:
+    default: op
+  simpleprefix.set:
+    default: op
+  simpleprefix.delete:
+    default: op
+  simpleprefix.save:
+    default: op
+  simpleprefix.format:
+    default: op
+  simpleprefix.migrate:
+    default: op
