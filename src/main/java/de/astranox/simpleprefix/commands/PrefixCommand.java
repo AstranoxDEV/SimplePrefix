@@ -1,4 +1,4 @@
-package de.syntaxjasom.simplePrefix.commands;
+package de.astranox.simpleprefix.commands;
 
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
@@ -7,12 +7,12 @@ import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.suggestion.Suggestions;
 import com.mojang.brigadier.suggestion.SuggestionsBuilder;
-import de.syntaxjasom.simplePrefix.SimplePrefix;
-import de.syntaxjasom.simplePrefix.managers.ChatManager;
-import de.syntaxjasom.simplePrefix.managers.ConfigManager;
-import de.syntaxjasom.simplePrefix.managers.GroupManager;
-import de.syntaxjasom.simplePrefix.managers.MigrationManager;
-import de.syntaxjasom.simplePrefix.managers.TeamManager;
+import de.astranox.simpleprefix.SimplePrefix;
+import de.astranox.simpleprefix.managers.ChatManager;
+import de.astranox.simpleprefix.managers.ConfigManager;
+import de.astranox.simpleprefix.managers.GroupManager;
+import de.astranox.simpleprefix.managers.MigrationManager;
+import de.astranox.simpleprefix.managers.TeamManager;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import io.papermc.paper.command.brigadier.Commands;
 import net.kyori.adventure.text.minimessage.MiniMessage;

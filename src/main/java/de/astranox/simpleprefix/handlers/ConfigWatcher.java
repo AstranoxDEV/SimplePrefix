@@ -1,9 +1,9 @@
-package de.syntaxjasom.simplePrefix.handlers;
+package de.astranox.simpleprefix.handlers;
 
-import de.syntaxjasom.simplePrefix.SimplePrefix;
-import de.syntaxjasom.simplePrefix.managers.ConfigManager;
-import de.syntaxjasom.simplePrefix.managers.GroupManager;
-import de.syntaxjasom.simplePrefix.managers.TeamManager;
+import de.astranox.simpleprefix.SimplePrefix;
+import de.astranox.simpleprefix.managers.ConfigManager;
+import de.astranox.simpleprefix.managers.GroupManager;
+import de.astranox.simpleprefix.managers.TeamManager;
 import org.bukkit.Bukkit;
 
 import java.io.IOException;

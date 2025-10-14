@@ -1,9 +1,10 @@
-package de.syntaxjasom.simplePrefix;
+package de.astranox.simpleprefix;
 
-import de.syntaxjasom.simplePrefix.commands.PrefixCommand;
-import de.syntaxjasom.simplePrefix.handlers.ConfigWatcher;
-import de.syntaxjasom.simplePrefix.handlers.LuckPermsEventHandler;
-import de.syntaxjasom.simplePrefix.handlers.PlayerJoinHandler;
+import de.astranox.simpleprefix.commands.PrefixCommand;
+import de.astranox.simpleprefix.handlers.ConfigWatcher;
+import de.astranox.simpleprefix.handlers.LuckPermsEventHandler;
+import de.astranox.simpleprefix.handlers.PlayerJoinHandler;
+import de.astranox.simpleprefix.managers.*;
 import de.syntaxjasom.simplePrefix.managers.*;
 import io.papermc.paper.command.brigadier.Commands;
 import io.papermc.paper.plugin.lifecycle.event.LifecycleEventManager;

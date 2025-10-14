@@ -1,6 +1,6 @@
-package de.syntaxjasom.simplePrefix.managers;
+package de.astranox.simpleprefix.managers;
 
-import de.syntaxjasom.simplePrefix.SimplePrefix;
+import de.astranox.simpleprefix.SimplePrefix;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
 

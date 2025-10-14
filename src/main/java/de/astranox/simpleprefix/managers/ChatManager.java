@@ -1,7 +1,7 @@
-package de.syntaxjasom.simplePrefix.managers;
+package de.astranox.simpleprefix.managers;
 
-import de.syntaxjasom.simplePrefix.SimplePrefix;
-import de.syntaxjasom.simplePrefix.util.ComponentParser;
+import de.astranox.simpleprefix.SimplePrefix;
+import de.astranox.simpleprefix.util.ComponentParser;
 import io.papermc.paper.event.player.AsyncChatEvent;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;

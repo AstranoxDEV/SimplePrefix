@@ -1,6 +1,6 @@
-package de.syntaxjasom.simplePrefix.util;
+package de.astranox.simpleprefix.util;
 
-import de.syntaxjasom.simplePrefix.SimplePrefix;
+import de.astranox.simpleprefix.SimplePrefix;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 

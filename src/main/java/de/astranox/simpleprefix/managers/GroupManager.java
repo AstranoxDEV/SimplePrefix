@@ -1,6 +1,6 @@
-package de.syntaxjasom.simplePrefix.managers;
+package de.astranox.simpleprefix.managers;
 
-import de.syntaxjasom.simplePrefix.SimplePrefix;
+import de.astranox.simpleprefix.SimplePrefix;
 import net.luckperms.api.LuckPerms;
 import net.luckperms.api.model.group.Group;
 import net.luckperms.api.node.NodeType;
@@ -10,7 +10,6 @@ import org.bukkit.Bukkit;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
-import org.bukkit.entity.Player;
 
 import java.io.File;
 import java.io.IOException;

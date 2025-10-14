@@ -1,7 +1,7 @@
-package de.syntaxjasom.simplePrefix.managers;
+package de.astranox.simpleprefix.managers;
 
-import de.syntaxjasom.simplePrefix.SimplePrefix;
-import de.syntaxjasom.simplePrefix.util.ComponentParser;
+import de.astranox.simpleprefix.SimplePrefix;
+import de.astranox.simpleprefix.util.ComponentParser;
 import net.luckperms.api.LuckPerms;
 import net.luckperms.api.model.user.User;
 import org.bukkit.entity.Player;
