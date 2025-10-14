@@ -32,7 +32,7 @@ public class PrefixCommand {
     private final ChatManager chatManager;
     private final MigrationManager migrationManager;
 
-    private static final String PREFIX = "&7「<gradient:#FFA07A:#FF6B9D>SimplePrefix</gradient>&7」";
+    private static final String PREFIX = "<gray>「<gradient:#FFA07A:#FF6B9D>SimplePrefix</gradient><gray>」";
 
     public PrefixCommand(SimplePrefix plugin, ConfigManager configManager, GroupManager groupManager,
                          TeamManager teamManager, ChatManager chatManager, MigrationManager migrationManager) {
@@ -142,13 +142,15 @@ public class PrefixCommand {
 
     private int showHelp(CommandContext<CommandSourceStack> context) {
         CommandSender sender = context.getSource().getSender();
-        sender.sendMessage(MiniMessage.miniMessage().deserialize("<gradient:#FF6B9D:#C44569>╔═════════════════════════════════╗</gradient>"));
+        sender.sendMessage(MiniMessage.miniMessage().deserialize("<gradient:#FF6B9D:#C44569>╔═══════════════════════════════════╗</gradient>"));
         sender.sendMessage(MiniMessage.miniMessage().deserialize("    " + PREFIX));
-        sender.sendMessage(MiniMessage.miniMessage().deserialize("<gradient:#FF6B9D:#C44569>╚═════════════════════════════════╝</gradient>"));
+        sender.sendMessage(MiniMessage.miniMessage().deserialize("<gradient:#FF6B9D:#C44569>╚═══════════════════════════════════╝</gradient>"));
         sender.sendMessage("");
         sendPrefixMessage(sender, "<#FFA07A>/sp reload <gray>- Reload configs");
         sendPrefixMessage(sender, "<#FFA07A>/sp update [player] <gray>- Update teams");
         sendPrefixMessage(sender, "<#FFA07A>/sp list <gray>- Show all groups");
+        sendPrefixMessage(sender, "<#FFA07A>/sp create <group> <prefix> <gray>- Create group");
+        sendPrefixMessage(sender, "<#FFA07A>/sp delete <group> <gray>- Delete group");
         sendPrefixMessage(sender, "<#FFA07A>/sp migrate luckprefix <gray>- Migrate from LuckPrefix");
         sendPrefixMessage(sender, "<#FFA07A>/sp cleanup <gray>- Remove empty groups");
         sender.sendMessage("");
@@ -156,11 +158,10 @@ public class PrefixCommand {
         sendPrefixMessage(sender, "<#FFA07A>/sp set <group> prefix <text> <gray>- Set prefix");
         sendPrefixMessage(sender, "<#FFA07A>/sp set <group> suffix <text> <gray>- Set suffix");
         sendPrefixMessage(sender, "<#FFA07A>/sp set <group> priority <num> <gray>- Set priority");
-        sendPrefixMessage(sender, "<#FFA07A>/sp set <group> namecolor oloror> <gray>- Set name color");
+        sendPrefixMessage(sender, "<#FFA07A>/sp set <group> namecolor <color> <gray>- Set name color");
         sendPrefixMessage(sender, "<#FFA07A>/sp clear <group> prefix <gray>- Clear prefix");
         sendPrefixMessage(sender, "<#FFA07A>/sp clear <group> suffix <gray>- Clear suffix");
         sendPrefixMessage(sender, "<#FFA07A>/sp clear <group> namecolor <gray>- Clear name color");
-        sendPrefixMessage(sender, "<#FFA07A>/sp delete <group> <gray>- Delete group");
         sendPrefixMessage(sender, "<#FFA07A>/sp save <group> <gray>- Save to config");
         sender.sendMessage("");
         sender.sendMessage(MiniMessage.miniMessage().deserialize("<gradient:#FFD700:#FFA500>▸ Format Management</gradient>"));

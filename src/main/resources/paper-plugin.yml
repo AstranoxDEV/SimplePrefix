@@ -29,3 +29,6 @@ permissions:
     default: op
   simpleprefix.migrate:
     default: op
+  simpleprefix.create:
+    description: Create groups
+    default: op

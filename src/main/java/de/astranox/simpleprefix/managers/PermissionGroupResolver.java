@@ -2,6 +2,7 @@ package de.astranox.simpleprefix.managers;
 
 import de.astranox.simpleprefix.SimplePrefix;
 import org.bukkit.entity.Player;
+import org.bukkit.permissions.PermissionAttachmentInfo;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -21,18 +22,38 @@ public class PermissionGroupResolver {
     public String resolveGroup(Player player) {
         Map<String, GroupManager.GroupData> allGroups = groupManager.getAllGroups();
 
+        if (plugin.getConfigManager().isDebugEnabled()) {
+            plugin.getLogger().info("=== Resolving group for " + player.getName() + " ===");
+            plugin.getLogger().info("Available groups in config: " + allGroups.keySet());
+            plugin.getLogger().info("Player's effective permissions:");
+            for (PermissionAttachmentInfo perm : player.getEffectivePermissions()) {
+                if (perm.getPermission().startsWith("simpleprefix.group.")) {
+                    plugin.getLogger().info("  - " + perm.getPermission() + " = " + perm.getValue());
+                }
+            }
+        }
+
         List<GroupEntry> matchedGroups = new ArrayList<>();
 
         for (Map.Entry<String, GroupManager.GroupData> entry : allGroups.entrySet()) {
             String groupName = entry.getKey();
             GroupManager.GroupData data = entry.getValue();
 
-            if (player.hasPermission("simpleprefix.group." + groupName)) {
+            String permission = "simpleprefix.group." + groupName.toLowerCase();
+
+            if (player.hasPermission(permission)) {
                 matchedGroups.add(new GroupEntry(groupName, data.priority));
+
+                if (plugin.getConfigManager().isDebugEnabled()) {
+                    plugin.getLogger().info("  ✓ Matched group: " + groupName + " (priority: " + data.priority + ")");
+                }
             }
         }
 
         if (matchedGroups.isEmpty()) {
+            if (plugin.getConfigManager().isDebugEnabled()) {
+                plugin.getLogger().info("  ! No groups matched, using default");
+            }
             return "default";
         }
 
@@ -41,7 +62,10 @@ public class PermissionGroupResolver {
         String resolvedGroup = matchedGroups.get(0).groupName;
 
         if (plugin.getConfigManager().isDebugEnabled()) {
-            plugin.getLogger().info("Resolved group for " + player.getName() + ": " + resolvedGroup + " (priority: " + matchedGroups.get(0).priority + ")");
+            plugin.getLogger().info("  → Resolved to: " + resolvedGroup + " (priority: " + matchedGroups.get(0).priority + ")");
+            if (matchedGroups.size() > 1) {
+                plugin.getLogger().info("  (Player has " + matchedGroups.size() + " groups, showing highest priority)");
+            }
         }
 
         return resolvedGroup;
