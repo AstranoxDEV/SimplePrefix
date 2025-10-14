@@ -1,0 +1,16 @@
+de\astranox\simpleprefix\managers\MigrationManager.class
+de\astranox\simpleprefix\managers\PermissionGroupResolver.class
+de\astranox\simpleprefix\managers\GroupManager$GroupData.class
+de\astranox\simpleprefix\managers\GroupManager.class
+de\astranox\simpleprefix\managers\ChatManager.class
+de\astranox\simpleprefix\managers\TeamManager.class
+de\astranox\simpleprefix\SimplePrefix.class
+de\astranox\simpleprefix\handlers\ConfigWatcher.class
+de\astranox\simpleprefix\managers\MigrationManager$MigrationResult.class
+de\astranox\simpleprefix\managers\PermissionGroupResolver$GroupEntry.class
+de\astranox\simpleprefix\util\ComponentParser.class
+de\astranox\simpleprefix\handlers\LuckPermsEventHandler.class
+de\astranox\simpleprefix\managers\LuckPermsWrapper.class
+de\astranox\simpleprefix\commands\PrefixCommand.class
+de\astranox\simpleprefix\handlers\PlayerJoinHandler.class
+de\astranox\simpleprefix\managers\ConfigManager.class

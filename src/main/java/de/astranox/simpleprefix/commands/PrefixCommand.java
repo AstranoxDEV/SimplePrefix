@@ -67,6 +67,12 @@ public class PrefixCommand {
                         .requires(source -> source.getSender().hasPermission("simpleprefix.list"))
                         .executes(this::handleList))
 
+                .then(Commands.literal("create")
+                        .requires(source -> source.getSender().hasPermission("simpleprefix.create"))
+                        .then(Commands.argument("group", StringArgumentType.word())
+                                .then(Commands.argument("prefix", StringArgumentType.greedyString())
+                                        .executes(this::handleCreate))))
+
                 .then(Commands.literal("set")
                         .requires(source -> source.getSender().hasPermission("simpleprefix.set"))
                         .then(Commands.argument("group", StringArgumentType.word())
@@ -99,7 +105,7 @@ public class PrefixCommand {
                         .requires(source -> source.getSender().hasPermission("simpleprefix.delete"))
                         .then(Commands.argument("group", StringArgumentType.word())
                                 .suggests(this::suggestGroups)
-                                .executes(this::handleDelete)))
+                                .executes(this::handleDeleteGroup)))
 
                 .then(Commands.literal("save")
                         .requires(source -> source.getSender().hasPermission("simpleprefix.save"))
@@ -164,6 +170,87 @@ public class PrefixCommand {
         sendPrefixMessage(sender, "<#FFA07A>/sp format tab <gray>- Show tab format");
         sendPrefixMessage(sender, "<#FFA07A>/sp format tab set <format> <gray>- Set format");
         sendPrefixMessage(sender, "<#FFA07A>/sp format tab toggle <gray>- Toggle tab");
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private int handleCreate(CommandContext<CommandSourceStack> context) {
+        CommandSender sender = context.getSource().getSender();
+        String groupName = context.getArgument("group", String.class);
+        String prefix = context.getArgument("prefix", String.class);
+
+        if (groupName.length() > 32) {
+            sendPrefixMessage(sender, "<red>Group name too long! Maximum 32 characters.");
+            return 0;
+        }
+
+        if (!groupName.matches("[a-zA-Z0-9_-]+")) {
+            sendPrefixMessage(sender, "<red>Invalid group name! Only letters, numbers, - and _ allowed.");
+            return 0;
+        }
+
+        sender.sendMessage(MiniMessage.miniMessage().deserialize("<gradient:#FF6B9D:#C44569>╔═════════════════════════════════╗</gradient>"));
+        sender.sendMessage(MiniMessage.miniMessage().deserialize("    <gradient:#FFA07A:#FF6B9D>Create Group</gradient>"));
+        sender.sendMessage(MiniMessage.miniMessage().deserialize("<gradient:#FF6B9D:#C44569>╚═════════════════════════════════╝</gradient>"));
+        sender.sendMessage("");
+
+        boolean success = groupManager.createGroup(groupName, prefix, "", 999, null);
+
+        if (!success) {
+            sendPrefixMessage(sender, "<red>Failed to create group! Group may already exist.");
+            return 0;
+        }
+
+        sendPrefixMessage(sender, "<green>Successfully created group: <yellow>" + groupName);
+        sender.sendMessage("");
+        sendPrefixMessage(sender, "<gray>Prefix: <reset>" + prefix);
+        sendPrefixMessage(sender, "<gray>Priority: <yellow>999 <gray>(default)");
+        sender.sendMessage("");
+
+        if (plugin.isUsingLuckPerms()) {
+            sendPrefixMessage(sender, "<green>✓ Group created in LuckPerms");
+        }
+        sendPrefixMessage(sender, "<green>✓ Group created in SimplePrefix");
+        sender.sendMessage("");
+        sendPrefixMessage(sender, "<gray>Use <yellow>/sp set " + groupName + " priority <num> <gray>to change priority");
+        sendPrefixMessage(sender, "<gray>Use <yellow>/sp set " + groupName + " suffix <text> <gray>to add suffix");
+        sendPrefixMessage(sender, "<gray>Use <yellow>/sp set " + groupName + " namecolor <color> <gray>to set name color");
+        sender.sendMessage("");
+
+        if (!plugin.isUsingLuckPerms()) {
+            sendPrefixMessage(sender, "<yellow>ℹ Give players permission: <gold>simpleprefix.group." + groupName);
+        }
+
+        updateAllPlayers();
+
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private int handleDeleteGroup(CommandContext<CommandSourceStack> context) {
+        CommandSender sender = context.getSource().getSender();
+        String groupName = context.getArgument("group", String.class);
+
+        sender.sendMessage(MiniMessage.miniMessage().deserialize("<gradient:#FF6B9D:#C44569>╔═════════════════════════════════╗</gradient>"));
+        sender.sendMessage(MiniMessage.miniMessage().deserialize("    <gradient:#FFA07A:#FF6B9D>Delete Group</gradient>"));
+        sender.sendMessage(MiniMessage.miniMessage().deserialize("<gradient:#FF6B9D:#C44569>╚═════════════════════════════════╝</gradient>"));
+        sender.sendMessage("");
+
+        boolean success = groupManager.deleteGroupCompletely(groupName);
+
+        if (!success) {
+            sendPrefixMessage(sender, "<red>Failed to delete group! See console for details.");
+            return 0;
+        }
+
+        sendPrefixMessage(sender, "<green>Successfully deleted group: <yellow>" + groupName);
+        sender.sendMessage("");
+
+        if (plugin.isUsingLuckPerms()) {
+            sendPrefixMessage(sender, "<green>✓ Group deleted from LuckPerms");
+        }
+        sendPrefixMessage(sender, "<green>✓ Group deleted from SimplePrefix");
+
+        updateAllPlayers();
+
         return Command.SINGLE_SUCCESS;
     }
 

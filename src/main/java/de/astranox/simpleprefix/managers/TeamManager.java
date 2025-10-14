@@ -8,23 +8,29 @@ import org.bukkit.entity.Player;
 import org.bukkit.scoreboard.Scoreboard;
 import org.bukkit.scoreboard.Team;
 
+
 public class TeamManager {
 
     private final SimplePrefix plugin;
-    private final LuckPerms luckPerms;
+    private final LuckPermsWrapper luckPermsWrapper;
     private final Scoreboard scoreboard;
     private final ConfigManager configManager;
     private final GroupManager groupManager;
+    private final PermissionGroupResolver permissionGroupResolver;
     private final ComponentParser componentParser;
+    private final boolean useLuckPerms;
 
-    public TeamManager(SimplePrefix plugin, LuckPerms luckPerms, Scoreboard scoreboard,
-                       ConfigManager configManager, GroupManager groupManager) {
+    public TeamManager(SimplePrefix plugin, LuckPermsWrapper luckPermsWrapper, Scoreboard scoreboard,
+                       ConfigManager configManager, GroupManager groupManager,
+                       PermissionGroupResolver permissionGroupResolver, boolean useLuckPerms) {
         this.plugin = plugin;
-        this.luckPerms = luckPerms;
+        this.luckPermsWrapper = luckPermsWrapper;
         this.scoreboard = scoreboard;
         this.configManager = configManager;
         this.groupManager = groupManager;
+        this.permissionGroupResolver = permissionGroupResolver;
         this.componentParser = new ComponentParser(plugin);
+        this.useLuckPerms = useLuckPerms;
     }
 
     public void updatePlayerTeam(Player player) {
@@ -33,19 +39,24 @@ public class TeamManager {
         }
 
         try {
-            User user = luckPerms.getPlayerAdapter(Player.class).getUser(player);
-            if (user == null) {
-                plugin.getLogger().warning("Could not get LuckPerms user for " + player.getName());
-                return;
-            }
+            String primaryGroup;
 
-            String primaryGroup = user.getPrimaryGroup();
+            if (useLuckPerms && luckPermsWrapper != null) {
+                primaryGroup = luckPermsWrapper.getPrimaryGroup(player);
+            } else {
+                primaryGroup = permissionGroupResolver.resolveGroup(player);
+            }
 
             GroupManager.GroupData groupData = groupManager.getGroup(primaryGroup);
 
             if (groupData == null) {
-                plugin.getLogger().warning("Could not get group data for " + primaryGroup);
-                return;
+                if (configManager.isDebugEnabled()) {
+                    plugin.getLogger().warning("Could not get group data for " + primaryGroup + " (using default)");
+                }
+                groupData = groupManager.getGroup("default");
+                if (groupData == null) {
+                    return;
+                }
             }
 
             String prefix = groupData.prefix;

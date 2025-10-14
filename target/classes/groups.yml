@@ -1,0 +1,5 @@
+groups:
+  default:
+    prefix: "&8Player &7"
+    suffix: ""
+    priority: 0

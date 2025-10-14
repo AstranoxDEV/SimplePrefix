@@ -15,17 +15,23 @@ import org.bukkit.event.Listener;
 public class ChatManager implements Listener {
 
     private final SimplePrefix plugin;
-    private final LuckPerms luckPerms;
+    private final LuckPermsWrapper luckPermsWrapper;
     private final ConfigManager configManager;
     private final GroupManager groupManager;
+    private final PermissionGroupResolver permissionGroupResolver;
     private final ComponentParser componentParser;
+    private final boolean useLuckPerms;
 
-    public ChatManager(SimplePrefix plugin, LuckPerms luckPerms, ConfigManager configManager, GroupManager groupManager) {
+    public ChatManager(SimplePrefix plugin, LuckPermsWrapper luckPermsWrapper, ConfigManager configManager,
+                       GroupManager groupManager, PermissionGroupResolver permissionGroupResolver,
+                       boolean useLuckPerms) {
         this.plugin = plugin;
-        this.luckPerms = luckPerms;
+        this.luckPermsWrapper = luckPermsWrapper;
         this.configManager = configManager;
         this.groupManager = groupManager;
+        this.permissionGroupResolver = permissionGroupResolver;
         this.componentParser = new ComponentParser(plugin);
+        this.useLuckPerms = useLuckPerms;
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
@@ -35,18 +41,22 @@ public class ChatManager implements Listener {
         }
 
         Player player = event.getPlayer();
-        User user = luckPerms.getPlayerAdapter(Player.class).getUser(player);
 
-        if (user == null) {
-            return;
+        String primaryGroup;
+
+        if (useLuckPerms && luckPermsWrapper != null) {
+            primaryGroup = luckPermsWrapper.getPrimaryGroup(player);
+        } else {
+            primaryGroup = permissionGroupResolver.resolveGroup(player);
         }
-
-        String primaryGroup = user.getPrimaryGroup();
 
         GroupManager.GroupData groupData = groupManager.getGroup(primaryGroup);
 
         if (groupData == null) {
-            return;
+            groupData = groupManager.getGroup("default");
+            if (groupData == null) {
+                return;
+            }
         }
 
         String prefix = groupData.prefix;
@@ -77,18 +87,21 @@ public class ChatManager implements Listener {
             return;
         }
 
-        User user = luckPerms.getPlayerAdapter(Player.class).getUser(player);
+        String primaryGroup;
 
-        if (user == null) {
-            return;
+        if (useLuckPerms && luckPermsWrapper != null) {
+            primaryGroup = luckPermsWrapper.getPrimaryGroup(player);
+        } else {
+            primaryGroup = permissionGroupResolver.resolveGroup(player);
         }
-
-        String primaryGroup = user.getPrimaryGroup();
 
         GroupManager.GroupData groupData = groupManager.getGroup(primaryGroup);
 
         if (groupData == null) {
-            return;
+            groupData = groupManager.getGroup("default");
+            if (groupData == null) {
+                return;
+            }
         }
 
         String prefix = groupData.prefix;

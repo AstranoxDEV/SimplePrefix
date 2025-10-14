@@ -21,11 +21,13 @@ import java.util.Arrays;
 
 public class SimplePrefix extends JavaPlugin implements Listener {
 
-    private LuckPerms luckPerms;
+    private LuckPermsWrapper luckPermsWrapper;
     private Scoreboard scoreboard;
+    private boolean useLuckPerms = false;
 
     private ConfigManager configManager;
     private GroupManager groupManager;
+    private PermissionGroupResolver permissionGroupResolver;
     private TeamManager teamManager;
     private ChatManager chatManager;
     private MigrationManager migrationManager;
@@ -34,9 +36,7 @@ public class SimplePrefix extends JavaPlugin implements Listener {
 
     @Override
     public void onEnable() {
-        if (!initializeLuckPerms()) {
-            return;
-        }
+        initializeLuckPerms();
 
         scoreboard = Bukkit.getScoreboardManager().getMainScoreboard();
 
@@ -47,7 +47,12 @@ public class SimplePrefix extends JavaPlugin implements Listener {
         startWatchers();
         initializePlayers();
 
-        getLogger().info("SimplePrefix enabled successfully!");
+        if (useLuckPerms) {
+            getLogger().info("SimplePrefix enabled with LuckPerms integration!");
+        } else {
+            getLogger().info("SimplePrefix enabled in permission-based mode!");
+            getLogger().info("Use permissions: simpleprefix.group.<groupname>");
+        }
     }
 
     @Override
@@ -58,22 +63,31 @@ public class SimplePrefix extends JavaPlugin implements Listener {
         getLogger().info("SimplePrefix disabled!");
     }
 
-    private boolean initializeLuckPerms() {
+    private void initializeLuckPerms() {
         try {
-            luckPerms = LuckPermsProvider.get();
-            return true;
+            Class.forName("net.luckperms.api.LuckPerms");
+            luckPermsWrapper = new LuckPermsWrapper();
+            useLuckPerms = true;
+            getLogger().info("LuckPerms detected! Using LuckPerms for group management.");
+        } catch (ClassNotFoundException e) {
+            getLogger().info("LuckPerms not found! Using permission-based group system.");
+            useLuckPerms = false;
         } catch (IllegalStateException e) {
-            getLogger().severe("LuckPerms not found! Plugin will be disabled.");
-            getServer().getPluginManager().disablePlugin(this);
-            return false;
+            getLogger().warning("LuckPerms found but not loaded yet! Using permission-based group system.");
+            useLuckPerms = false;
+        } catch (Exception e) {
+            getLogger().warning("Error initializing LuckPerms: " + e.getMessage());
+            getLogger().info("Falling back to permission-based group system.");
+            useLuckPerms = false;
         }
     }
 
     private void initializeManagers() {
         configManager = new ConfigManager(this);
-        groupManager = new GroupManager(this, luckPerms);
-        teamManager = new TeamManager(this, luckPerms, scoreboard, configManager, groupManager);
-        chatManager = new ChatManager(this, luckPerms, configManager, groupManager);
+        groupManager = new GroupManager(this, luckPermsWrapper, useLuckPerms);
+        permissionGroupResolver = new PermissionGroupResolver(this, groupManager);
+        teamManager = new TeamManager(this, luckPermsWrapper, scoreboard, configManager, groupManager, permissionGroupResolver, useLuckPerms);
+        chatManager = new ChatManager(this, luckPermsWrapper, configManager, groupManager, permissionGroupResolver, useLuckPerms);
         migrationManager = new MigrationManager(this, groupManager, configManager);
     }
 
@@ -88,8 +102,10 @@ public class SimplePrefix extends JavaPlugin implements Listener {
         PlayerJoinHandler joinHandler = new PlayerJoinHandler(this, teamManager, chatManager, configManager);
         getServer().getPluginManager().registerEvents(joinHandler, this);
 
-        luckPermsEventHandler = new LuckPermsEventHandler(this, luckPerms, teamManager, chatManager, configManager, groupManager);
-        luckPermsEventHandler.register();
+        if (useLuckPerms && luckPermsWrapper != null) {
+            luckPermsEventHandler = new LuckPermsEventHandler(this, luckPermsWrapper, teamManager, chatManager, configManager, groupManager);
+            luckPermsEventHandler.register();
+        }
     }
 
     private void registerCommands() {
@@ -135,8 +151,12 @@ public class SimplePrefix extends JavaPlugin implements Listener {
         }
     }
 
-    public LuckPerms getLuckPerms() {
-        return luckPerms;
+    public boolean isUsingLuckPerms() {
+        return useLuckPerms;
+    }
+
+    public LuckPermsWrapper getLuckPermsWrapper() {
+        return luckPermsWrapper;
     }
 
     public ConfigManager getConfigManager() {
@@ -145,6 +165,10 @@ public class SimplePrefix extends JavaPlugin implements Listener {
 
     public GroupManager getGroupManager() {
         return groupManager;
+    }
+
+    public PermissionGroupResolver getPermissionGroupResolver() {
+        return permissionGroupResolver;
     }
 
     public TeamManager getTeamManager() {

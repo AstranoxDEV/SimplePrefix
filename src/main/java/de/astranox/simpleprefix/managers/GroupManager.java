@@ -19,14 +19,16 @@ import java.util.Map;
 public class GroupManager {
 
     private final SimplePrefix plugin;
-    private final LuckPerms luckPerms;
+    private final LuckPermsWrapper luckPermsWrapper;
+    private final boolean useLuckPerms;
     private File groupsFile;
     private FileConfiguration groupsConfig;
     private long lastModified;
 
-    public GroupManager(SimplePrefix plugin, LuckPerms luckPerms) {
+    public GroupManager(SimplePrefix plugin, LuckPermsWrapper luckPermsWrapper, boolean useLuckPerms) {
         this.plugin = plugin;
-        this.luckPerms = luckPerms;
+        this.luckPermsWrapper = luckPermsWrapper;
+        this.useLuckPerms = useLuckPerms;
     }
 
     public void loadGroups() {
@@ -39,16 +41,20 @@ public class GroupManager {
         groupsConfig = YamlConfiguration.loadConfiguration(groupsFile);
         lastModified = groupsFile.lastModified();
 
-        applyConfigOverridesToLuckPerms();
+        if (useLuckPerms) {
+            applyConfigOverridesToLuckPerms();
+        }
     }
 
     public void reloadGroups() {
         groupsConfig = YamlConfiguration.loadConfiguration(groupsFile);
         lastModified = groupsFile.lastModified();
 
-        applyConfigOverridesToLuckPerms();
+        if (useLuckPerms) {
+            applyConfigOverridesToLuckPerms();
+        }
 
-        plugin.getLogger().info("Groups config reloaded and synced to LuckPerms!");
+        plugin.getLogger().info("Groups config reloaded" + (useLuckPerms ? " and synced to LuckPerms!" : "!"));
     }
 
     public boolean checkAndReload() {
@@ -62,7 +68,79 @@ public class GroupManager {
         return true;
     }
 
+    public boolean createGroup(String groupName, String prefix, String suffix, int priority, String nameColor) {
+        if (groupExists(groupName)) {
+            plugin.getLogger().warning("Group '" + groupName + "' already exists!");
+            return false;
+        }
+
+        if (useLuckPerms && luckPermsWrapper != null) {
+            boolean created = luckPermsWrapper.createGroup(groupName);
+
+            if (!created) {
+                plugin.getLogger().severe("Failed to create group '" + groupName + "' in LuckPerms!");
+                return false;
+            }
+
+            luckPermsWrapper.setGroupPrefix(groupName, prefix, priority);
+            luckPermsWrapper.setGroupSuffix(groupName, suffix, priority);
+
+            plugin.getLogger().info("Created group '" + groupName + "' in LuckPerms!");
+        }
+
+        saveToConfig(groupName, prefix, suffix, priority, nameColor);
+
+        plugin.getLogger().info("Created group '" + groupName + "' in SimplePrefix!");
+
+        return true;
+    }
+
+    public boolean groupExists(String groupName) {
+        if (useLuckPerms && luckPermsWrapper != null) {
+            return luckPermsWrapper.groupExists(groupName);
+        }
+
+        return groupsConfig.getConfigurationSection("groups." + groupName) != null;
+    }
+
+    public boolean deleteGroupCompletely(String groupName) {
+        if (groupName.equalsIgnoreCase("default")) {
+            plugin.getLogger().warning("Cannot delete default group!");
+            return false;
+        }
+
+        if (!groupExists(groupName)) {
+            plugin.getLogger().warning("Group '" + groupName + "' does not exist!");
+            return false;
+        }
+
+        if (useLuckPerms && luckPermsWrapper != null) {
+            boolean deleted = luckPermsWrapper.deleteGroup(groupName);
+
+            if (deleted) {
+                plugin.getLogger().info("Deleted group '" + groupName + "' from LuckPerms!");
+            }
+        }
+
+        groupsConfig.set("groups." + groupName, null);
+
+        try {
+            groupsConfig.save(groupsFile);
+            lastModified = groupsFile.lastModified();
+            plugin.getLogger().info("Deleted group '" + groupName + "' from SimplePrefix!");
+            return true;
+        } catch (IOException e) {
+            plugin.getLogger().severe("Failed to save groups.yml!");
+            e.printStackTrace();
+            return false;
+        }
+    }
+
     public void applyConfigOverridesToLuckPerms() {
+        if (!useLuckPerms || luckPermsWrapper == null) {
+            return;
+        }
+
         ConfigurationSection groups = groupsConfig.getConfigurationSection("groups");
 
         if (groups == null) {
@@ -76,8 +154,15 @@ public class GroupManager {
             String suffix = groups.getString(groupName + ".suffix");
             int priority = groups.getInt(groupName + ".priority", 0);
 
-            boolean success = setGroupInLuckPerms(groupName, prefix, suffix, priority);
-            if (success) {
+            if (!luckPermsWrapper.groupExists(groupName)) {
+                plugin.getLogger().warning("Group '" + groupName + "' does not exist in LuckPerms!");
+                continue;
+            }
+
+            boolean prefixSuccess = luckPermsWrapper.setGroupPrefix(groupName, prefix, priority);
+            boolean suffixSuccess = luckPermsWrapper.setGroupSuffix(groupName, suffix, priority);
+
+            if (prefixSuccess || suffixSuccess) {
                 count++;
             }
         }
@@ -88,29 +173,17 @@ public class GroupManager {
     public Map<String, GroupData> getAllGroups() {
         Map<String, GroupData> result = new HashMap<>();
 
-        for (Group group : luckPerms.getGroupManager().getLoadedGroups()) {
-            String groupName = group.getName();
+        ConfigurationSection groups = groupsConfig.getConfigurationSection("groups");
 
-            String prefix = null;
-            String suffix = null;
-            int priority = 0;
+        if (groups == null) {
+            return result;
+        }
 
-            for (PrefixNode node : group.getNodes(NodeType.PREFIX)) {
-                prefix = node.getMetaValue();
-                priority = node.getPriority();
-                break;
-            }
-
-            for (SuffixNode node : group.getNodes(NodeType.SUFFIX)) {
-                suffix = node.getMetaValue();
-                break;
-            }
-
-            String nameColor = null;
-            ConfigurationSection groupSection = groupsConfig.getConfigurationSection("groups." + groupName);
-            if (groupSection != null) {
-                nameColor = groupSection.getString("nameColor");
-            }
+        for (String groupName : groups.getKeys(false)) {
+            String prefix = groups.getString(groupName + ".prefix", "");
+            String suffix = groups.getString(groupName + ".suffix", "");
+            int priority = groups.getInt(groupName + ".priority", 999);
+            String nameColor = groups.getString(groupName + ".nameColor");
 
             result.put(groupName, new GroupData(prefix, suffix, priority, nameColor));
         }
@@ -119,32 +192,16 @@ public class GroupManager {
     }
 
     public GroupData getGroup(String groupName) {
-        Group group = luckPerms.getGroupManager().getGroup(groupName);
+        ConfigurationSection groupSection = groupsConfig.getConfigurationSection("groups." + groupName);
 
-        if (group == null) {
+        if (groupSection == null) {
             return null;
         }
 
-        String prefix = null;
-        String suffix = null;
-        int priority = 0;
-        String nameColor = null;
-
-        for (PrefixNode node : group.getNodes(NodeType.PREFIX)) {
-            prefix = node.getMetaValue();
-            priority = node.getPriority();
-            break;
-        }
-
-        for (SuffixNode node : group.getNodes(NodeType.SUFFIX)) {
-            suffix = node.getMetaValue();
-            break;
-        }
-
-        ConfigurationSection groupSection = groupsConfig.getConfigurationSection("groups." + groupName);
-        if (groupSection != null) {
-            nameColor = groupSection.getString("nameColor");
-        }
+        String prefix = groupSection.getString("prefix", "");
+        String suffix = groupSection.getString("suffix", "");
+        int priority = groupSection.getInt("priority", 999);
+        String nameColor = groupSection.getString("nameColor");
 
         return new GroupData(prefix, suffix, priority, nameColor);
     }
@@ -154,7 +211,15 @@ public class GroupManager {
     }
 
     public void setGroup(String groupName, String prefix, String suffix, int priority, String nameColor) {
-        setGroupInLuckPerms(groupName, prefix, suffix, priority);
+        if (useLuckPerms && luckPermsWrapper != null) {
+            if (!luckPermsWrapper.groupExists(groupName)) {
+                plugin.getLogger().warning("Group '" + groupName + "' does not exist in LuckPerms!");
+            } else {
+                luckPermsWrapper.setGroupPrefix(groupName, prefix, priority);
+                luckPermsWrapper.setGroupSuffix(groupName, suffix, priority);
+            }
+        }
+
         saveToConfig(groupName, prefix, suffix, priority, nameColor);
 
         Bukkit.getScheduler().runTaskLater(plugin, () -> {
@@ -162,41 +227,12 @@ public class GroupManager {
         }, 10L);
     }
 
-    private boolean setGroupInLuckPerms(String groupName, String prefix, String suffix, int priority) {
-        Group group = luckPerms.getGroupManager().getGroup(groupName);
-
-        if (group == null) {
-            plugin.getLogger().warning("Group '" + groupName + "' does not exist in LuckPerms!");
-            return false;
-        }
-
-        group.data().clear(node -> node instanceof PrefixNode);
-        group.data().clear(node -> node instanceof SuffixNode);
-
-        if (prefix != null && !prefix.isEmpty()) {
-            group.data().add(PrefixNode.builder(prefix, priority).build());
-        }
-
-        if (suffix != null && !suffix.isEmpty()) {
-            group.data().add(SuffixNode.builder(suffix, priority).build());
-        }
-
-        luckPerms.getGroupManager().saveGroup(group);
-
-        if (plugin.getConfigManager().isDebugEnabled()) {
-            plugin.getLogger().info("Updated group '" + groupName + "' in LuckPerms: prefix='" + prefix + "', suffix='" + suffix + "', priority=" + priority);
-        }
-
-        return true;
-    }
-
     public void deleteGroup(String groupName) {
-        Group group = luckPerms.getGroupManager().getGroup(groupName);
-
-        if (group != null) {
-            group.data().clear(node -> node instanceof PrefixNode);
-            group.data().clear(node -> node instanceof SuffixNode);
-            luckPerms.getGroupManager().saveGroup(group);
+        if (useLuckPerms && luckPermsWrapper != null) {
+            if (luckPermsWrapper.groupExists(groupName)) {
+                luckPermsWrapper.setGroupPrefix(groupName, "", 0);
+                luckPermsWrapper.setGroupSuffix(groupName, "", 0);
+            }
         }
 
         groupsConfig.set("groups." + groupName, null);
@@ -246,7 +282,6 @@ public class GroupManager {
             plugin.getLogger().severe("Failed to save groups.yml!");
             e.printStackTrace();
         } finally {
-            // Entferne Save-Lock nach kurzer Zeit
             Bukkit.getScheduler().runTaskLater(plugin, () -> {
                 if (plugin.getConfigWatcher() != null) {
                     plugin.getConfigWatcher().setSaving(false);
@@ -254,7 +289,6 @@ public class GroupManager {
             }, 5L);
         }
     }
-
 
     public static class GroupData {
         public final String prefix;
