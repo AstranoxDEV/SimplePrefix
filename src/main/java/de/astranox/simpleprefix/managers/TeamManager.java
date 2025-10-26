@@ -2,15 +2,12 @@ package de.astranox.simpleprefix.managers;
 
 import de.astranox.simpleprefix.SimplePrefix;
 import de.astranox.simpleprefix.util.ComponentParser;
-import net.luckperms.api.LuckPerms;
-import net.luckperms.api.model.user.User;
+import de.astranox.simpleprefix.util.VersionUtil;
 import org.bukkit.entity.Player;
 import org.bukkit.scoreboard.Scoreboard;
 import org.bukkit.scoreboard.Team;
 
-
 public class TeamManager {
-
     private final SimplePrefix plugin;
     private final LuckPermsWrapper luckPermsWrapper;
     private final Scoreboard scoreboard;
@@ -19,6 +16,9 @@ public class TeamManager {
     private final PermissionGroupResolver permissionGroupResolver;
     private final ComponentParser componentParser;
     private final boolean useLuckPerms;
+
+    private final int prefixLimit;
+    private final int suffixLimit;
 
     public TeamManager(SimplePrefix plugin, LuckPermsWrapper luckPermsWrapper, Scoreboard scoreboard,
                        ConfigManager configManager, GroupManager groupManager,
@@ -31,157 +31,169 @@ public class TeamManager {
         this.permissionGroupResolver = permissionGroupResolver;
         this.componentParser = new ComponentParser(plugin);
         this.useLuckPerms = useLuckPerms;
+
+        this.prefixLimit = VersionUtil.getPrefixLimit();
+        this.suffixLimit = VersionUtil.getSuffixLimit();
+
+        plugin.getLogger().info("TeamManager limits: prefix=" + prefixLimit + ", suffix=" + suffixLimit + " (MC " + VersionUtil.getVersionString() + ")");
     }
 
     public void updatePlayerTeam(Player player) {
-        if (player == null || !player.isOnline()) {
+        if (player == null || !player.isOnline()) return;
+
+        String primaryGroup = resolvePlayerGroup(player);
+        GroupManager.GroupData groupData = obtainGroupData(primaryGroup);
+        if (groupData == null) return;
+
+        String teamName = generateTeamName(player, primaryGroup, groupData);
+        removeOldTeam(player);
+        Team team = getOrCreateTeam(teamName);
+        applyTeamFormat(team, player, groupData);
+        setupTeamOptions(team);
+        team.addEntry(player.getName());
+    }
+
+    private String resolvePlayerGroup(Player player) {
+        if (useLuckPerms && luckPermsWrapper != null) return luckPermsWrapper.getPrimaryGroup(player);
+        return permissionGroupResolver.resolveGroup(player);
+    }
+
+    private GroupManager.GroupData obtainGroupData(String group) {
+        GroupManager.GroupData d = groupManager.getGroup(group);
+        if (d != null) return d;
+        return groupManager.getGroup("default");
+    }
+
+    private void removeOldTeam(Player player) {
+        Team old = scoreboard.getPlayerTeam(player);
+        if (old == null) return;
+        old.removeEntry(player.getName());
+        if (old.getSize() == 0) old.unregister();
+    }
+
+    private Team getOrCreateTeam(String name) {
+        Team t = scoreboard.getTeam(name);
+        if (t != null) return t;
+        return scoreboard.registerNewTeam(name);
+    }
+
+    private void applyTeamFormat(Team team, Player player, GroupManager.GroupData data) {
+        if (!configManager.isTabFormatEnabled()) {
+            applySimplePrefixSuffix(team, data);
+            return;
+        }
+        applyCustomTabFormat(team, player, data);
+    }
+
+    private void applySimplePrefixSuffix(Team team, GroupManager.GroupData data) {
+        String parsedPrefix = componentParser.parse(data.prefix != null ? data.prefix : "");
+        String parsedSuffix = componentParser.parse(data.suffix != null ? data.suffix : "");
+
+        team.setPrefix(ensureTrailingSpace(parsedPrefix, prefixLimit));
+        team.setSuffix(trimToPacketLimit(parsedSuffix, suffixLimit));
+    }
+
+    private void applyCustomTabFormat(Team team, Player player, GroupManager.GroupData data) {
+        String parsedPrefix = componentParser.parse(data.prefix != null ? data.prefix : "");
+        String parsedSuffix = componentParser.parse(data.suffix != null ? data.suffix : "");
+        String parsedNameColor = componentParser.parse(data.nameColor != null && !data.nameColor.isEmpty() ? "<" + data.nameColor + ">" : "");
+
+        String format = configManager.getTabFormat()
+                .replace("{prefix}", parsedPrefix)
+                .replace("{suffix}", parsedSuffix)
+                .replace("{player}", "")
+                .replace("{displayname}", "");
+
+        String finalPrefix = ensureTrailingSpace(format + parsedNameColor, prefixLimit);
+        team.setPrefix(finalPrefix);
+        team.setSuffix("");
+    }
+
+    private String trimToPacketLimit(String s, int max) {
+        if (s == null || s.isEmpty()) return "";
+        int count = 0;
+        StringBuilder out = new StringBuilder();
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c == '§' && i + 1 < s.length()) {
+                if (count + 2 > max) break;
+                out.append(c).append(s.charAt(++i));
+                count += 2;
+                continue;
+            }
+            if (count + 1 > max) break;
+            out.append(c);
+            count++;
+        }
+        return out.toString();
+    }
+
+    private String ensureTrailingSpace(String text, int limit) {
+        if (text == null) return " ";
+        text = trimToPacketLimit(text, limit);
+        if (text.endsWith(" ")) return text;
+
+        int len = packetLength(text);
+        if (len < limit) return text;
+
+        return trimToPacketLimit(text, limit - 1);
+    }
+
+    private int packetLength(String s) {
+        if (s == null || s.isEmpty()) return 0;
+        int count = 0;
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c == '§' && i + 1 < s.length()) {
+                count += 2;
+                i++;
+                continue;
+            }
+            count++;
+        }
+        return count;
+    }
+
+    private void setupTeamOptions(Team team) {
+        if (team == null) return;
+
+        if (VersionUtil.isLegacyVersion()) {
+            try {
+                team.setCanSeeFriendlyInvisibles(true);
+                team.setAllowFriendlyFire(false);
+            } catch (Throwable ignored) {}
             return;
         }
 
         try {
-            String primaryGroup;
+            Class<?> optionClass = Class.forName("org.bukkit.scoreboard.Team$Option");
+            Class<?> statusClass = Class.forName("org.bukkit.scoreboard.Team$OptionStatus");
 
-            if (useLuckPerms && luckPermsWrapper != null) {
-                primaryGroup = luckPermsWrapper.getPrimaryGroup(player);
-            } else {
-                primaryGroup = permissionGroupResolver.resolveGroup(player);
-            }
+            Object nameTag = Enum.valueOf((Class<Enum>) optionClass, "NAME_TAG_VISIBILITY");
+            Object collision = Enum.valueOf((Class<Enum>) optionClass, "COLLISION_RULE");
+            Object always = Enum.valueOf((Class<Enum>) statusClass, "ALWAYS");
 
-            GroupManager.GroupData groupData = groupManager.getGroup(primaryGroup);
-
-            if (groupData == null) {
-                if (configManager.isDebugEnabled()) {
-                    plugin.getLogger().warning("Could not get group data for " + primaryGroup + " (using default)");
-                }
-                groupData = groupManager.getGroup("default");
-                if (groupData == null) {
-                    return;
-                }
-            }
-
-            String prefix = groupData.prefix;
-            String suffix = groupData.suffix;
-
-            String teamName = generateTeamName(player, primaryGroup, groupData);
-
-            removeOldTeam(player);
-
-            Team team = getOrCreateTeam(teamName);
-
-            updateTeamFormat(team, player, prefix, suffix, groupData);
-
-            team.setOption(Team.Option.NAME_TAG_VISIBILITY, Team.OptionStatus.ALWAYS);
-            team.setOption(Team.Option.COLLISION_RULE, Team.OptionStatus.ALWAYS);
-
-            team.addEntry(player.getName());
-
-            if (configManager.isDebugEnabled()) {
-                plugin.getLogger().info("Updated team for " + player.getName() + " (Group: " + primaryGroup + ", Prefix: " + prefix + ")");
-            }
-
-        } catch (Exception e) {
-            plugin.getLogger().severe("Error updating team for " + player.getName());
-            e.printStackTrace();
+            team.getClass().getMethod("setOption", optionClass, statusClass).invoke(team, nameTag, always);
+            team.getClass().getMethod("setOption", optionClass, statusClass).invoke(team, collision, always);
+        } catch (Throwable t) {
+            try {
+                team.setCanSeeFriendlyInvisibles(true);
+            } catch (Throwable ignored) {}
         }
-    }
-
-    private void removeOldTeam(Player player) {
-        Team oldTeam = scoreboard.getPlayerTeam(player);
-
-        if (oldTeam == null) {
-            return;
-        }
-
-        oldTeam.removeEntry(player.getName());
-
-        if (oldTeam.getSize() == 0) {
-            oldTeam.unregister();
-        }
-    }
-
-    private Team getOrCreateTeam(String teamName) {
-        Team team = scoreboard.getTeam(teamName);
-
-        if (team == null) {
-            team = scoreboard.registerNewTeam(teamName);
-        }
-
-        return team;
-    }
-
-    private void updateTeamFormat(Team team, Player player, String prefix, String suffix,
-                                  GroupManager.GroupData groupData) {
-        if (!configManager.isTabFormatEnabled()) {
-            updateLegacyFormat(team, prefix, suffix);
-            return;
-        }
-
-        updateModernFormat(team, player, prefix, suffix, groupData);
-    }
-
-    private void updateLegacyFormat(Team team, String prefix, String suffix) {
-        if (prefix != null && !prefix.isEmpty()) {
-            team.prefix(componentParser.parse(prefix));
-        }
-
-        if (suffix != null && !suffix.isEmpty()) {
-            team.suffix(componentParser.parse(suffix));
-        }
-    }
-
-    private void updateModernFormat(Team team, Player player, String prefix, String suffix,
-                                    GroupManager.GroupData groupData) {
-        String format = configManager.getTabFormat();
-
-        String nameColor = getNameColor(groupData);
-
-        format = format.replace("{prefix}", prefix != null ? prefix : "");
-        format = format.replace("{suffix}", suffix != null ? suffix : "");
-        format = format.replace("{player}", "");
-        format = format.replace("{displayname}", "");
-
-        String fullPrefix = format + nameColor;
-
-        if (!fullPrefix.isEmpty()) {
-            team.prefix(componentParser.parse(fullPrefix));
-        }
-    }
-
-    private String getNameColor(GroupManager.GroupData groupData) {
-        if (groupData == null || groupData.nameColor == null || groupData.nameColor.isEmpty()) {
-            return "";
-        }
-
-        return "<" + groupData.nameColor + ">";
     }
 
     public void removePlayerTeam(Player player) {
-        if (player == null) {
-            return;
-        }
-
-        Team team = scoreboard.getPlayerTeam(player);
-
-        if (team == null) {
-            return;
-        }
-
-        team.removeEntry(player.getName());
-
-        if (team.getSize() == 0) {
-            team.unregister();
-        }
+        if (player == null) return;
+        Team t = scoreboard.getPlayerTeam(player);
+        if (t == null) return;
+        t.removeEntry(player.getName());
+        if (t.getSize() == 0) t.unregister();
     }
 
-    private String generateTeamName(Player player, String primaryGroup, GroupManager.GroupData groupData) {
-        int priority = 999;
-        if (groupData != null) {
-            priority = groupData.priority;
-        }
-
-        String sortPrefix = String.format("%03d", Math.max(0, Math.min(999, priority)));
-        String playerSuffix = player.getName().toLowerCase().substring(0, Math.min(player.getName().length(), 10));
-
-        return sortPrefix + "_" + playerSuffix;
+    private String generateTeamName(Player player, String group, GroupManager.GroupData data) {
+        int pr = data != null ? data.priority : 999;
+        String sort = String.format("%03d", Math.max(0, Math.min(999, pr)));
+        String tail = player.getName().toLowerCase().substring(0, Math.min(player.getName().length(), 10));
+        return sort + "_" + tail;
     }
 }

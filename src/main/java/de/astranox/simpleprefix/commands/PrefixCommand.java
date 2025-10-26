@@ -1,672 +1,603 @@
 package de.astranox.simpleprefix.commands;
 
-import com.mojang.brigadier.Command;
-import com.mojang.brigadier.arguments.IntegerArgumentType;
-import com.mojang.brigadier.arguments.StringArgumentType;
-import com.mojang.brigadier.builder.LiteralArgumentBuilder;
-import com.mojang.brigadier.context.CommandContext;
-import com.mojang.brigadier.suggestion.Suggestions;
-import com.mojang.brigadier.suggestion.SuggestionsBuilder;
 import de.astranox.simpleprefix.SimplePrefix;
-import de.astranox.simpleprefix.managers.ChatManager;
+import de.astranox.simpleprefix.managers.TabChatManager;
 import de.astranox.simpleprefix.managers.ConfigManager;
 import de.astranox.simpleprefix.managers.GroupManager;
 import de.astranox.simpleprefix.managers.MigrationManager;
 import de.astranox.simpleprefix.managers.TeamManager;
-import io.papermc.paper.command.brigadier.CommandSourceStack;
-import io.papermc.paper.command.brigadier.Commands;
+
+import de.astranox.simpleprefix.util.ComponentParser;
 import net.kyori.adventure.text.minimessage.MiniMessage;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
+
 import org.bukkit.Bukkit;
+import org.bukkit.command.Command;
+import org.bukkit.command.CommandExecutor;
+import org.bukkit.command.TabCompleter;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 
-import java.util.Map;
-import java.util.concurrent.CompletableFuture;
+import java.util.*;
+import java.util.stream.Collectors;
 
-public class PrefixCommand {
-
+public class PrefixCommand implements CommandExecutor, TabCompleter {
     private final SimplePrefix plugin;
     private final ConfigManager configManager;
     private final GroupManager groupManager;
     private final TeamManager teamManager;
-    private final ChatManager chatManager;
+    private final TabChatManager chatManager;
     private final MigrationManager migrationManager;
 
-    private static final String PREFIX = "<gray>「<gradient:#FFA07A:#FF6B9D>SimplePrefix</gradient><gray>」";
+    private final String prefix;
 
-    public PrefixCommand(SimplePrefix plugin, ConfigManager configManager, GroupManager groupManager,
-                         TeamManager teamManager, ChatManager chatManager, MigrationManager migrationManager) {
+    private final MiniMessage mm = MiniMessage.miniMessage();
+    private final LegacyComponentSerializer legacy = LegacyComponentSerializer.legacyAmpersand();
+
+    public PrefixCommand(SimplePrefix plugin,
+                         ConfigManager configManager,
+                         GroupManager groupManager,
+                         TeamManager teamManager,
+                         TabChatManager chatManager,
+                         MigrationManager migrationManager) {
         this.plugin = plugin;
         this.configManager = configManager;
         this.groupManager = groupManager;
         this.teamManager = teamManager;
         this.chatManager = chatManager;
         this.migrationManager = migrationManager;
+        if(isModern()) {
+            prefix = "<gray>「<gradient:#FFA07A:#FF6B9D>SimplePrefix</gradient><gray>」";
+            return;
+        }
+        prefix = "&7「&6SimplePrefix&7」";
     }
 
-    public LiteralArgumentBuilder<CommandSourceStack> buildCommand() {
-        return Commands.literal("sp")
-                .requires(source -> source.getSender().hasPermission("simpleprefix.use"))
-                .executes(this::showHelp)
-
-                .then(Commands.literal("help")
-                        .executes(this::showHelp))
-
-                .then(Commands.literal("reload")
-                        .requires(source -> source.getSender().hasPermission("simpleprefix.reload"))
-                        .executes(this::handleReload))
-
-                .then(Commands.literal("update")
-                        .requires(source -> source.getSender().hasPermission("simpleprefix.update"))
-                        .executes(this::handleUpdateAll)
-                        .then(Commands.argument("player", StringArgumentType.word())
-                                .suggests(this::suggestPlayers)
-                                .executes(this::handleUpdatePlayer)))
-
-                .then(Commands.literal("list")
-                        .requires(source -> source.getSender().hasPermission("simpleprefix.list"))
-                        .executes(this::handleList))
-
-                .then(Commands.literal("create")
-                        .requires(source -> source.getSender().hasPermission("simpleprefix.create"))
-                        .then(Commands.argument("group", StringArgumentType.word())
-                                .then(Commands.argument("prefix", StringArgumentType.greedyString())
-                                        .executes(this::handleCreate))))
-
-                .then(Commands.literal("set")
-                        .requires(source -> source.getSender().hasPermission("simpleprefix.set"))
-                        .then(Commands.argument("group", StringArgumentType.word())
-                                .suggests(this::suggestGroups)
-                                .then(Commands.literal("prefix")
-                                        .then(Commands.argument("value", StringArgumentType.greedyString())
-                                                .executes(this::handleSetPrefix)))
-                                .then(Commands.literal("suffix")
-                                        .then(Commands.argument("value", StringArgumentType.greedyString())
-                                                .executes(this::handleSetSuffix)))
-                                .then(Commands.literal("priority")
-                                        .then(Commands.argument("value", IntegerArgumentType.integer(0, 999))
-                                                .executes(this::handleSetPriority)))
-                                .then(Commands.literal("namecolor")
-                                        .then(Commands.argument("value", StringArgumentType.greedyString())
-                                                .executes(this::handleSetNameColor)))))
-
-                .then(Commands.literal("clear")
-                        .requires(source -> source.getSender().hasPermission("simpleprefix.set"))
-                        .then(Commands.argument("group", StringArgumentType.word())
-                                .suggests(this::suggestGroups)
-                                .then(Commands.literal("prefix")
-                                        .executes(this::handleClearPrefix))
-                                .then(Commands.literal("suffix")
-                                        .executes(this::handleClearSuffix))
-                                .then(Commands.literal("namecolor")
-                                        .executes(this::handleClearNameColor))))
-
-                .then(Commands.literal("delete")
-                        .requires(source -> source.getSender().hasPermission("simpleprefix.delete"))
-                        .then(Commands.argument("group", StringArgumentType.word())
-                                .suggests(this::suggestGroups)
-                                .executes(this::handleDeleteGroup)))
-
-                .then(Commands.literal("save")
-                        .requires(source -> source.getSender().hasPermission("simpleprefix.save"))
-                        .then(Commands.argument("group", StringArgumentType.word())
-                                .suggests(this::suggestGroups)
-                                .executes(this::handleSave)))
-
-                .then(Commands.literal("format")
-                        .requires(source -> source.getSender().hasPermission("simpleprefix.format"))
-                        .then(Commands.literal("chat")
-                                .executes(this::handleFormatChatShow)
-                                .then(Commands.literal("set")
-                                        .then(Commands.argument("format", StringArgumentType.greedyString())
-                                                .executes(this::handleFormatChatSet)))
-                                .then(Commands.literal("toggle")
-                                        .executes(this::handleFormatChatToggle)))
-                        .then(Commands.literal("tab")
-                                .executes(this::handleFormatTabShow)
-                                .then(Commands.literal("set")
-                                        .then(Commands.argument("format", StringArgumentType.greedyString())
-                                                .executes(this::handleFormatTabSet)))
-                                .then(Commands.literal("toggle")
-                                        .executes(this::handleFormatTabToggle))))
-
-                .then(Commands.literal("migrate")
-                        .requires(source -> source.getSender().hasPermission("simpleprefix.migrate"))
-                        .then(Commands.literal("luckprefix")
-                                .executes(this::handleMigrateLuckPrefix)))
-
-                .then(Commands.literal("cleanup")
-                        .requires(source -> source.getSender().hasPermission("simpleprefix.cleanup"))
-                        .executes(this::handleCleanup));
+    private void sendMM(CommandSender sender, String mini) {
+        ComponentParser parser = new ComponentParser(plugin);
+        sender.sendMessage(parser.parse(mini));
     }
 
-    private int showHelp(CommandContext<CommandSourceStack> context) {
-        CommandSender sender = context.getSource().getSender();
-        sender.sendMessage(MiniMessage.miniMessage().deserialize("<gradient:#FF6B9D:#C44569>╔═══════════════════════════════════╗</gradient>"));
-        sender.sendMessage(MiniMessage.miniMessage().deserialize("    " + PREFIX));
-        sender.sendMessage(MiniMessage.miniMessage().deserialize("<gradient:#FF6B9D:#C44569>╚═══════════════════════════════════╝</gradient>"));
+    private void sendPrefix(CommandSender sender, String mini) {
+        sendMM(sender, prefix + " » " + mini);
+    }
+
+    private void header(CommandSender sender, String title) {
+        sendMM(sender, "&8╔═══════════════════════════════╗");
+        sendMM(sender, " " + title);
+        sendMM(sender, "&8╚═══════════════════════════════╝");
         sender.sendMessage("");
-        sendPrefixMessage(sender, "<#FFA07A>/sp reload <gray>- Reload configs");
-        sendPrefixMessage(sender, "<#FFA07A>/sp update [player] <gray>- Update teams");
-        sendPrefixMessage(sender, "<#FFA07A>/sp list <gray>- Show all groups");
-        sendPrefixMessage(sender, "<#FFA07A>/sp create <group> <prefix> <gray>- Create group");
-        sendPrefixMessage(sender, "<#FFA07A>/sp delete <group> <gray>- Delete group");
-        sendPrefixMessage(sender, "<#FFA07A>/sp migrate luckprefix <gray>- Migrate from LuckPrefix");
-        sendPrefixMessage(sender, "<#FFA07A>/sp cleanup <gray>- Remove empty groups");
-        sender.sendMessage("");
-        sender.sendMessage(MiniMessage.miniMessage().deserialize("<gradient:#FFD700:#FFA500>▸ Group Management</gradient>"));
-        sendPrefixMessage(sender, "<#FFA07A>/sp set <group> prefix <text> <gray>- Set prefix");
-        sendPrefixMessage(sender, "<#FFA07A>/sp set <group> suffix <text> <gray>- Set suffix");
-        sendPrefixMessage(sender, "<#FFA07A>/sp set <group> priority <num> <gray>- Set priority");
-        sendPrefixMessage(sender, "<#FFA07A>/sp set <group> namecolor <color> <gray>- Set name color");
-        sendPrefixMessage(sender, "<#FFA07A>/sp clear <group> prefix <gray>- Clear prefix");
-        sendPrefixMessage(sender, "<#FFA07A>/sp clear <group> suffix <gray>- Clear suffix");
-        sendPrefixMessage(sender, "<#FFA07A>/sp clear <group> namecolor <gray>- Clear name color");
-        sendPrefixMessage(sender, "<#FFA07A>/sp save <group> <gray>- Save to config");
-        sender.sendMessage("");
-        sender.sendMessage(MiniMessage.miniMessage().deserialize("<gradient:#FFD700:#FFA500>▸ Format Management</gradient>"));
-        sendPrefixMessage(sender, "<#FFA07A>/sp format chat <gray>- Show chat format");
-        sendPrefixMessage(sender, "<#FFA07A>/sp format chat set <format> <gray>- Set format");
-        sendPrefixMessage(sender, "<#FFA07A>/sp format chat toggle <gray>- Toggle chat");
-        sendPrefixMessage(sender, "<#FFA07A>/sp format tab <gray>- Show tab format");
-        sendPrefixMessage(sender, "<#FFA07A>/sp format tab set <format> <gray>- Set format");
-        sendPrefixMessage(sender, "<#FFA07A>/sp format tab toggle <gray>- Toggle tab");
-        return Command.SINGLE_SUCCESS;
     }
 
-    private int handleCreate(CommandContext<CommandSourceStack> context) {
-        CommandSender sender = context.getSource().getSender();
-        String groupName = context.getArgument("group", String.class);
-        String prefix = context.getArgument("prefix", String.class);
-
-        if (groupName.length() > 32) {
-            sendPrefixMessage(sender, "<red>Group name too long! Maximum 32 characters.");
-            return 0;
+    private void require(CommandSender sender, String perm) throws NoPermission {
+        if (!sender.hasPermission(perm)) {
+            sendPrefix(sender, "<red>No permission: <white>" + perm);
+            throw new NoPermission();
         }
-
-        if (!groupName.matches("[a-zA-Z0-9_-]+")) {
-            sendPrefixMessage(sender, "<red>Invalid group name! Only letters, numbers, - and _ allowed.");
-            return 0;
-        }
-
-        sender.sendMessage(MiniMessage.miniMessage().deserialize("<gradient:#FF6B9D:#C44569>╔═════════════════════════════════╗</gradient>"));
-        sender.sendMessage(MiniMessage.miniMessage().deserialize("    <gradient:#FFA07A:#FF6B9D>Create Group</gradient>"));
-        sender.sendMessage(MiniMessage.miniMessage().deserialize("<gradient:#FF6B9D:#C44569>╚═════════════════════════════════╝</gradient>"));
-        sender.sendMessage("");
-
-        boolean success = groupManager.createGroup(groupName, prefix, "", 999, null);
-
-        if (!success) {
-            sendPrefixMessage(sender, "<red>Failed to create group! Group may already exist.");
-            return 0;
-        }
-
-        sendPrefixMessage(sender, "<green>Successfully created group: <yellow>" + groupName);
-        sender.sendMessage("");
-        sendPrefixMessage(sender, "<gray>Prefix: <reset>" + prefix);
-        sendPrefixMessage(sender, "<gray>Priority: <yellow>999 <gray>(default)");
-        sender.sendMessage("");
-
-        if (plugin.isUsingLuckPerms()) {
-            sendPrefixMessage(sender, "<green>✓ Group created in LuckPerms");
-        }
-        sendPrefixMessage(sender, "<green>✓ Group created in SimplePrefix");
-        sender.sendMessage("");
-        sendPrefixMessage(sender, "<gray>Use <yellow>/sp set " + groupName + " priority <num> <gray>to change priority");
-        sendPrefixMessage(sender, "<gray>Use <yellow>/sp set " + groupName + " suffix <text> <gray>to add suffix");
-        sendPrefixMessage(sender, "<gray>Use <yellow>/sp set " + groupName + " namecolor <color> <gray>to set name color");
-        sender.sendMessage("");
-
-        if (!plugin.isUsingLuckPerms()) {
-            sendPrefixMessage(sender, "<yellow>ℹ Give players permission: <gold>simpleprefix.group." + groupName);
-        }
-
-        updateAllPlayers();
-
-        return Command.SINGLE_SUCCESS;
     }
 
-    private int handleDeleteGroup(CommandContext<CommandSourceStack> context) {
-        CommandSender sender = context.getSource().getSender();
-        String groupName = context.getArgument("group", String.class);
-
-        sender.sendMessage(MiniMessage.miniMessage().deserialize("<gradient:#FF6B9D:#C44569>╔═════════════════════════════════╗</gradient>"));
-        sender.sendMessage(MiniMessage.miniMessage().deserialize("    <gradient:#FFA07A:#FF6B9D>Delete Group</gradient>"));
-        sender.sendMessage(MiniMessage.miniMessage().deserialize("<gradient:#FF6B9D:#C44569>╚═════════════════════════════════╝</gradient>"));
-        sender.sendMessage("");
-
-        boolean success = groupManager.deleteGroupCompletely(groupName);
-
-        if (!success) {
-            sendPrefixMessage(sender, "<red>Failed to delete group! See console for details.");
-            return 0;
-        }
-
-        sendPrefixMessage(sender, "<green>Successfully deleted group: <yellow>" + groupName);
-        sender.sendMessage("");
-
-        if (plugin.isUsingLuckPerms()) {
-            sendPrefixMessage(sender, "<green>✓ Group deleted from LuckPerms");
-        }
-        sendPrefixMessage(sender, "<green>✓ Group deleted from SimplePrefix");
-
-        updateAllPlayers();
-
-        return Command.SINGLE_SUCCESS;
-    }
-
-    private int handleReload(CommandContext<CommandSourceStack> context) {
-        CommandSender sender = context.getSource().getSender();
-
-        configManager.reloadConfig();
-        groupManager.reloadGroups();
-        updateAllPlayers();
-
-        sendPrefixMessage(sender, "<green>Configs reloaded successfully!");
-        return Command.SINGLE_SUCCESS;
-    }
-
-    private int handleUpdateAll(CommandContext<CommandSourceStack> context) {
-        CommandSender sender = context.getSource().getSender();
-
-        updateAllPlayers();
-
-        sendPrefixMessage(sender, "<green>All players updated!");
-        return Command.SINGLE_SUCCESS;
-    }
-
-    private int handleUpdatePlayer(CommandContext<CommandSourceStack> context) {
-        CommandSender sender = context.getSource().getSender();
-        String playerName = context.getArgument("player", String.class);
-
-        Player player = Bukkit.getPlayer(playerName);
-
-        if (player == null) {
-            sendPrefixMessage(sender, "<red>Player not found!");
-            return 0;
-        }
-
-        teamManager.updatePlayerTeam(player);
-        chatManager.updatePlayerListName(player);
-
-        sendPrefixMessage(sender, "<green>Updated player: <yellow>" + player.getName());
-        return Command.SINGLE_SUCCESS;
-    }
-
-    private int handleList(CommandContext<CommandSourceStack> context) {
-        CommandSender sender = context.getSource().getSender();
-
-        sender.sendMessage(MiniMessage.miniMessage().deserialize("<gradient:#FF6B9D:#C44569>╔═════════════════════════════════╗</gradient>"));
-        sender.sendMessage(MiniMessage.miniMessage().deserialize("    <gradient:#FFA07A:#FF6B9D>Groups</gradient>"));
-        sender.sendMessage(MiniMessage.miniMessage().deserialize("<gradient:#FF6B9D:#C44569>╚═════════════════════════════════╝</gradient>"));
-        sender.sendMessage("");
-
-        Map<String, GroupManager.GroupData> groups = groupManager.getAllGroups();
-
-        for (Map.Entry<String, GroupManager.GroupData> entry : groups.entrySet()) {
-            GroupManager.GroupData data = entry.getValue();
-            sendPrefixMessage(sender, "<yellow>" + entry.getKey() + " <gray>(Priority: " + data.priority + ")");
-
-            if (data.prefix != null && !data.prefix.isEmpty()) {
-                sender.sendMessage(MiniMessage.miniMessage().deserialize("  <gray>Prefix: <reset>" + data.prefix));
-            }
-
-            if (data.suffix != null && !data.suffix.isEmpty()) {
-                sender.sendMessage(MiniMessage.miniMessage().deserialize("  <gray>Suffix: <reset>" + data.suffix));
-            }
-
-            if (data.nameColor != null && !data.nameColor.isEmpty()) {
-                sender.sendMessage(MiniMessage.miniMessage().deserialize("  <gray>Name Color: <" + data.nameColor + ">" + data.nameColor));
-            }
-        }
-
-        return Command.SINGLE_SUCCESS;
-    }
-
-    private int handleSetPrefix(CommandContext<CommandSourceStack> context) {
-        String group = context.getArgument("group", String.class);
-        String value = context.getArgument("value", String.class);
-
-        GroupManager.GroupData current = groupManager.getGroup(group);
-        if (current == null) {
-            sendPrefixMessage(context.getSource().getSender(), "<red>Group '" + group + "' not found in LuckPerms!");
-            return 0;
-        }
-
-        String suffix = (current.suffix != null) ? current.suffix : "";
-        int priority = current.priority;
-        String nameColor = current.nameColor;
-
-        groupManager.setGroup(group, value, suffix, priority, nameColor);
-        updateAllPlayers();
-        sendPrefixMessage(context.getSource().getSender(), "<green>Prefix for group <yellow>" + group + " <green>set to: <reset>" + value);
-
-        return Command.SINGLE_SUCCESS;
-    }
-
-    private int handleSetSuffix(CommandContext<CommandSourceStack> context) {
-        String group = context.getArgument("group", String.class);
-        String value = context.getArgument("value", String.class);
-
-        GroupManager.GroupData current = groupManager.getGroup(group);
-        if (current == null) {
-            sendPrefixMessage(context.getSource().getSender(), "<red>Group '" + group + "' not found in LuckPerms!");
-            return 0;
-        }
-
-        String prefix = (current.prefix != null) ? current.prefix : "";
-        int priority = current.priority;
-        String nameColor = current.nameColor;
-
-        groupManager.setGroup(group, prefix, value, priority, nameColor);
-        updateAllPlayers();
-        sendPrefixMessage(context.getSource().getSender(), "<green>Suffix for group <yellow>" + group + " <green>set to: <reset>" + value);
-
-        return Command.SINGLE_SUCCESS;
-    }
-
-    private int handleSetPriority(CommandContext<CommandSourceStack> context) {
-        String group = context.getArgument("group", String.class);
-        int value = context.getArgument("value", Integer.class);
-
-        GroupManager.GroupData current = groupManager.getGroup(group);
-        if (current == null) {
-            sendPrefixMessage(context.getSource().getSender(), "<red>Group '" + group + "' not found in LuckPerms!");
-            return 0;
-        }
-
-        String prefix = (current.prefix != null) ? current.prefix : "";
-        String suffix = (current.suffix != null) ? current.suffix : "";
-        String nameColor = current.nameColor;
-
-        groupManager.setGroup(group, prefix, suffix, value, nameColor);
-        updateAllPlayers();
-        sendPrefixMessage(context.getSource().getSender(), "<green>Priority for group <yellow>" + group + " <green>set to: <yellow>" + value);
-
-        return Command.SINGLE_SUCCESS;
-    }
-
-    private int handleSetNameColor(CommandContext<CommandSourceStack> context) {
-        String group = context.getArgument("group", String.class);
-        String value = context.getArgument("value", String.class);
-
-        GroupManager.GroupData current = groupManager.getGroup(group);
-        if (current == null) {
-            sendPrefixMessage(context.getSource().getSender(), "<red>Group '" + group + "' not found in LuckPerms!");
-            return 0;
-        }
-
-        String prefix = (current.prefix != null) ? current.prefix : "";
-        String suffix = (current.suffix != null) ? current.suffix : "";
-        int priority = current.priority;
-
-        groupManager.setGroup(group, prefix, suffix, priority, value);
-        updateAllPlayers();
-        sendPrefixMessage(context.getSource().getSender(), "<green>Name color for group <yellow>" + group + " <green>set to: <reset>" + value);
-
-        return Command.SINGLE_SUCCESS;
-    }
-
-    private int handleClearPrefix(CommandContext<CommandSourceStack> context) {
-        String group = context.getArgument("group", String.class);
-
-        GroupManager.GroupData current = groupManager.getGroup(group);
-        if (current == null) {
-            sendPrefixMessage(context.getSource().getSender(), "<red>Group '" + group + "' not found in LuckPerms!");
-            return 0;
-        }
-
-        String suffix = (current.suffix != null) ? current.suffix : "";
-        int priority = current.priority;
-        String nameColor = current.nameColor;
-
-        groupManager.setGroup(group, "", suffix, priority, nameColor);
-        updateAllPlayers();
-        sendPrefixMessage(context.getSource().getSender(), "<green>Prefix for group <yellow>" + group + " <green>cleared!");
-
-        return Command.SINGLE_SUCCESS;
-    }
-
-    private int handleClearSuffix(CommandContext<CommandSourceStack> context) {
-        String group = context.getArgument("group", String.class);
-
-        GroupManager.GroupData current = groupManager.getGroup(group);
-        if (current == null) {
-            sendPrefixMessage(context.getSource().getSender(), "<red>Group '" + group + "' not found in LuckPerms!");
-            return 0;
-        }
-
-        String prefix = (current.prefix != null) ? current.prefix : "";
-        int priority = current.priority;
-        String nameColor = current.nameColor;
-
-        groupManager.setGroup(group, prefix, "", priority, nameColor);
-        updateAllPlayers();
-        sendPrefixMessage(context.getSource().getSender(), "<green>Suffix for group <yellow>" + group + " <green>cleared!");
-
-        return Command.SINGLE_SUCCESS;
-    }
-
-    private int handleClearNameColor(CommandContext<CommandSourceStack> context) {
-        String group = context.getArgument("group", String.class);
-
-        GroupManager.GroupData current = groupManager.getGroup(group);
-        if (current == null) {
-            sendPrefixMessage(context.getSource().getSender(), "<red>Group '" + group + "' not found in LuckPerms!");
-            return 0;
-        }
-
-        String prefix = (current.prefix != null) ? current.prefix : "";
-        String suffix = (current.suffix != null) ? current.suffix : "";
-        int priority = current.priority;
-
-        groupManager.setGroup(group, prefix, suffix, priority, null);
-        updateAllPlayers();
-        sendPrefixMessage(context.getSource().getSender(), "<green>Name color for group <yellow>" + group + " <green>cleared!");
-
-        return Command.SINGLE_SUCCESS;
-    }
-
-    private int handleDelete(CommandContext<CommandSourceStack> context) {
-        String group = context.getArgument("group", String.class);
-
-        groupManager.deleteGroup(group);
-        updateAllPlayers();
-        sendPrefixMessage(context.getSource().getSender(), "<green>Group <yellow>" + group + " <green>deleted!");
-
-        return Command.SINGLE_SUCCESS;
-    }
-
-    private int handleSave(CommandContext<CommandSourceStack> context) {
-        String group = context.getArgument("group", String.class);
-
-        groupManager.saveToConfig(group);
-        sendPrefixMessage(context.getSource().getSender(), "<green>Group <yellow>" + group + " <green>saved to config!");
-
-        return Command.SINGLE_SUCCESS;
-    }
-
-    private int handleFormatChatShow(CommandContext<CommandSourceStack> context) {
-        CommandSender sender = context.getSource().getSender();
-
-        String format = configManager.getChatFormat();
-        boolean enabled = configManager.isChatFormatEnabled();
-
-        sender.sendMessage(MiniMessage.miniMessage().deserialize("<gradient:#FF6B9D:#C44569>╔═════════════════════════════════╗</gradient>"));
-        sender.sendMessage(MiniMessage.miniMessage().deserialize("    <gradient:#FFA07A:#FF6B9D>Chat Format</gradient>"));
-        sender.sendMessage(MiniMessage.miniMessage().deserialize("<gradient:#FF6B9D:#C44569>╚═════════════════════════════════╝</gradient>"));
-        sender.sendMessage("");
-        sendPrefixMessage(sender, "<gray>Status: " + (enabled ? "<green>Enabled" : "<red>Disabled"));
-        sendPrefixMessage(sender, "<gray>Format: <yellow>" + format);
-
-        return Command.SINGLE_SUCCESS;
-    }
-
-    private int handleFormatChatSet(CommandContext<CommandSourceStack> context) {
-        String format = context.getArgument("format", String.class);
-
-        configManager.setChatFormat(format);
-        sendPrefixMessage(context.getSource().getSender(), "<green>Chat format set to: <yellow>" + format);
-
-        return Command.SINGLE_SUCCESS;
-    }
-
-    private int handleFormatChatToggle(CommandContext<CommandSourceStack> context) {
-        boolean current = configManager.isChatFormatEnabled();
-        configManager.setChatEnabled(!current);
-
-        sendPrefixMessage(context.getSource().getSender(), "<green>Chat format " + (!current ? "<green>enabled" : "<red>disabled") + "!");
-
-        return Command.SINGLE_SUCCESS;
-    }
-
-    private int handleFormatTabShow(CommandContext<CommandSourceStack> context) {
-        CommandSender sender = context.getSource().getSender();
-
-        String format = configManager.getTabFormat();
-        boolean enabled = configManager.isTabFormatEnabled();
-
-        sender.sendMessage(MiniMessage.miniMessage().deserialize("<gradient:#FF6B9D:#C44569>╔═════════════════════════════════╗</gradient>"));
-        sender.sendMessage(MiniMessage.miniMessage().deserialize("    <gradient:#FFA07A:#FF6B9D>Tab Format</gradient>"));
-        sender.sendMessage(MiniMessage.miniMessage().deserialize("<gradient:#FF6B9D:#C44569>╚═════════════════════════════════╝</gradient>"));
-        sender.sendMessage("");
-        sendPrefixMessage(sender, "<gray>Status: " + (enabled ? "<green>Enabled" : "<red>Disabled"));
-        sendPrefixMessage(sender, "<gray>Format: <yellow>" + format);
-
-        return Command.SINGLE_SUCCESS;
-    }
-
-    private int handleFormatTabSet(CommandContext<CommandSourceStack> context) {
-        String format = context.getArgument("format", String.class);
-
-        configManager.setTabFormat(format);
-        updateAllPlayers();
-        sendPrefixMessage(context.getSource().getSender(), "<green>Tab format set to: <yellow>" + format);
-
-        return Command.SINGLE_SUCCESS;
-    }
-
-    private int handleFormatTabToggle(CommandContext<CommandSourceStack> context) {
-        boolean current = configManager.isTabFormatEnabled();
-        configManager.setTabEnabled(!current);
-        updateAllPlayers();
-
-        sendPrefixMessage(context.getSource().getSender(), "<green>Tab format " + (!current ? "<green>enabled" : "<red>disabled") + "!");
-
-        return Command.SINGLE_SUCCESS;
-    }
-
-    private int handleMigrateLuckPrefix(CommandContext<CommandSourceStack> context) {
-        CommandSender sender = context.getSource().getSender();
-
-        sender.sendMessage(MiniMessage.miniMessage().deserialize("<gradient:#FF6B9D:#C44569>╔═════════════════════════════════╗</gradient>"));
-        sender.sendMessage(MiniMessage.miniMessage().deserialize("    <gradient:#FFA07A:#FF6B9D>LuckPrefix Migration</gradient>"));
-        sender.sendMessage(MiniMessage.miniMessage().deserialize("<gradient:#FF6B9D:#C44569>╚═════════════════════════════════╝</gradient>"));
-        sender.sendMessage("");
-        sendPrefixMessage(sender, "<yellow>Starting migration from LuckPrefix...");
-
-        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
-            MigrationManager.MigrationResult result = migrationManager.migrateLuckPrefix();
-
-            Bukkit.getScheduler().runTask(plugin, () -> {
-                if (!result.success) {
-                    sendPrefixMessage(sender, "<red>" + result.message);
-                    return;
-                }
-
-                sendPrefixMessage(sender, "<green>" + result.message);
-                sender.sendMessage("");
-
-                if (!result.details.isEmpty()) {
-                    sender.sendMessage(MiniMessage.miniMessage().deserialize("<gradient:#FFD700:#FFA500>▸ Migration Details</gradient>"));
-
-                    for (Map.Entry<String, String> entry : result.details.entrySet()) {
-                        String status = entry.getValue();
-                        String color = status.startsWith("✓") ? "<green>" : "<gray>";
-                        sendPrefixMessage(sender, color + "  • " + entry.getKey() + " <dark_gray>→ <gray>" + status);
-                    }
-                }
-
-                sender.sendMessage("");
-                sendPrefixMessage(sender, "<green>Migration complete! Updating all players...");
-
-                updateAllPlayers();
-
-                Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                    sendPrefixMessage(sender, "<green>All players updated successfully!");
-                }, 20L);
-            });
-        });
-
-        return Command.SINGLE_SUCCESS;
-    }
-
-    private int handleCleanup(CommandContext<CommandSourceStack> context) {
-        CommandSender sender = context.getSource().getSender();
-
-        sender.sendMessage(MiniMessage.miniMessage().deserialize("<gradient:#FF6B9D:#C44569>╔═════════════════════════════════╗</gradient>"));
-        sender.sendMessage(MiniMessage.miniMessage().deserialize("    <gradient:#FFA07A:#FF6B9D>Group Cleanup</gradient>"));
-        sender.sendMessage(MiniMessage.miniMessage().deserialize("<gradient:#FF6B9D:#C44569>╚═════════════════════════════════╝</gradient>"));
-        sender.sendMessage("");
-        sendPrefixMessage(sender, "<yellow>Cleaning up empty groups...");
-
-        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
-            MigrationManager.MigrationResult result = migrationManager.cleanupEmptyGroups();
-
-            Bukkit.getScheduler().runTask(plugin, () -> {
-                if (result.migratedCount == 0) {
-                    sendPrefixMessage(sender, "<green>" + result.message);
-                    return;
-                }
-
-                sendPrefixMessage(sender, "<green>" + result.message);
-                sender.sendMessage("");
-
-                if (!result.details.isEmpty()) {
-                    sender.sendMessage(MiniMessage.miniMessage().deserialize("<gradient:#FFD700:#FFA500>▸ Removed Groups</gradient>"));
-
-                    for (String groupName : result.details.keySet()) {
-                        sendPrefixMessage(sender, "<red>  • " + groupName);
-                    }
-                }
-
-                sender.sendMessage("");
-                sendPrefixMessage(sender, "<green>Cleanup complete! Updating all players...");
-
-                updateAllPlayers();
-
-                Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                    sendPrefixMessage(sender, "<green>All players updated successfully!");
-                }, 20L);
-            });
-        });
-
-        return Command.SINGLE_SUCCESS;
-    }
+    private static class NoPermission extends Exception {}
 
     private void updateAllPlayers() {
         plugin.updateAllPlayers();
     }
 
-    private void sendPrefixMessage(CommandSender sender, String message) {
-        sender.sendMessage(MiniMessage.miniMessage().deserialize(PREFIX + " <gray>» " + message));
+    @Override
+    public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        try {
+            if (!sender.hasPermission("simpleprefix.use")) {
+                sendPrefix(sender, "<red>No permission: <white>simpleprefix.use");
+                return true;
+            }
+
+            if (args.length == 0 || args[0].equalsIgnoreCase("help")) {
+                showHelp(sender);
+                return true;
+            }
+
+            String sub = args[0].toLowerCase(Locale.ROOT);
+
+            switch (sub) {
+                case "reload": {
+                    require(sender, "simpleprefix.reload");
+                    configManager.reloadConfig();
+                    groupManager.reloadGroups();
+                    updateAllPlayers();
+                    sendPrefix(sender, "<green>Configs reloaded successfully!");
+                    return true;
+                }
+
+                case "update": {
+                    require(sender, "simpleprefix.update");
+                    if (args.length == 1) {
+                        updateAllPlayers();
+                        sendPrefix(sender, "<green>All players updated!");
+                        return true;
+                    }
+                    String playerName = args[1];
+                    Player p = Bukkit.getPlayerExact(playerName);
+                    if (p == null) {
+                        sendPrefix(sender, "<red>Player not found!");
+                        return true;
+                    }
+                    teamManager.updatePlayerTeam(p);
+                    chatManager.updatePlayerListName(p);
+                    sendPrefix(sender, "<green>Updated player: <white>" + p.getName());
+                    return true;
+                }
+
+                case "list": {
+                    require(sender, "simpleprefix.list");
+                    header(sender, "Groups");
+                    Map<String, GroupManager.GroupData> groups = groupManager.getAllGroups();
+                    for (Map.Entry<String, GroupManager.GroupData> e : groups.entrySet()) {
+                        GroupManager.GroupData d = e.getValue();
+                        sendPrefix(sender, "<yellow>" + e.getKey() + " <gray>(Priority: <white>" + d.priority + "<gray>)");
+                        if (d.prefix != null && !d.prefix.isEmpty()) {
+                            sendMM(sender, "  Prefix: " + d.prefix);
+                        }
+                        if (d.suffix != null && !d.suffix.isEmpty()) {
+                            sendMM(sender, "  Suffix: " + d.suffix);
+                        }
+                        if (d.nameColor != null && !d.nameColor.isEmpty()) {
+                            sendMM(sender, "  Name Color: <" + d.nameColor + ">" + d.nameColor);
+                        }
+                    }
+                    return true;
+                }
+
+                case "create": {
+                    require(sender, "simpleprefix.create");
+                    if (args.length < 3) {
+                        sendPrefix(sender, "<red>Usage: <white>/" + label + " create <group> <prefix...>");
+                        return true;
+                    }
+                    String groupName = args[1];
+                    String prefix = join(args, 2);
+
+                    if (groupName.length() > 32) {
+                        sendPrefix(sender, "<red>Group name too long! Maximum 32 characters.");
+                        return true;
+                    }
+                    if (!groupName.matches("[a-zA-Z0-9_-]+")) {
+                        sendPrefix(sender, "<red>Invalid group name! Only letters, numbers, - and _ allowed.");
+                        return true;
+                    }
+
+                    header(sender, "Create Group");
+                    boolean success = groupManager.createGroup(groupName, prefix, "", 999, null);
+                    if (!success) {
+                        sendPrefix(sender, "<red>Failed to create group! Group may already exist.");
+                        return true;
+                    }
+
+                    sendPrefix(sender, "<green>Successfully created group: <white>" + groupName);
+                    sender.sendMessage("");
+                    sendPrefix(sender, "<gray>Prefix: <white>" + prefix);
+                    sendPrefix(sender, "<gray>Priority: <white>999 <gray>(default)");
+                    sender.sendMessage("");
+
+                    if (plugin.isUsingLuckPerms()) {
+                        sendPrefix(sender, "<green>✓ Group created in LuckPerms");
+                    }
+                    sendPrefix(sender, "<green>✓ Group created in SimplePrefix");
+                    sender.sendMessage("");
+                    sendPrefix(sender, "<gray>Use <white>/" + label + " set " + groupName + " priority <yellow><value><gray> to change priority");
+                    sendPrefix(sender, "<gray>Use <white>/" + label + " set " + groupName + " suffix <yellow><value><gray> to add suffix");
+                    sendPrefix(sender, "<gray>Use <white>/" + label + " set " + groupName + " namecolor <yellow><value><gray> to set name color");
+                    sender.sendMessage("");
+
+                    if (!plugin.isUsingLuckPerms()) {
+                        sendPrefix(sender, "<yellow>ℹ Give players permission: <white>simpleprefix.group." + groupName);
+                    }
+
+                    updateAllPlayers();
+                    return true;
+                }
+
+                case "delete": {
+                    require(sender, "simpleprefix.delete");
+                    if (args.length < 2) {
+                        sendPrefix(sender, "<red>Usage: <white>/" + label + " delete <group>");
+                        return true;
+                    }
+                    String groupName = args[1];
+                    header(sender, "Delete Group");
+                    boolean success = groupManager.deleteGroupCompletely(groupName);
+                    if (!success) {
+                        sendPrefix(sender, "<red>Failed to delete group! See console for details.");
+                        return true;
+                    }
+                    sendPrefix(sender, "<green>Successfully deleted group: <white>" + groupName);
+                    if (plugin.isUsingLuckPerms()) {
+                        sendPrefix(sender, "<green>✓ Group deleted from LuckPerms");
+                    }
+                    sendPrefix(sender, "<green>✓ Group deleted from SimplePrefix");
+                    updateAllPlayers();
+                    return true;
+                }
+
+                case "set": {
+                    require(sender, "simpleprefix.set");
+                    if (args.length < 4) {
+                        sendPrefix(sender, "<red>Usage: <white>/" + label + " set <group> <prefix|suffix|priority|namecolor> <value>");
+                        return true;
+                    }
+                    String group = args[1];
+                    String field = args[2].toLowerCase(Locale.ROOT);
+                    String value = join(args, 3);
+
+                    GroupManager.GroupData current = groupManager.getGroup(group);
+                    if (current == null) {
+                        sendPrefix(sender, "<red>Group '<white>" + group + "</white>' not found in LuckPerms!");
+                        return true;
+                    }
+
+                    String prefix = current.prefix != null ? current.prefix : "";
+                    String suffix = current.suffix != null ? current.suffix : "";
+                    int priority = current.priority;
+                    String nameColor = current.nameColor;
+
+                    switch (field) {
+                        case "prefix":
+                            prefix = value;
+                            groupManager.setGroup(group, prefix, suffix, priority, nameColor);
+                            updateAllPlayers();
+                            sendPrefix(sender, "<green>Prefix for group <white>" + group + "</white> set to: <white>" + value);
+                            return true;
+                        case "suffix":
+                            suffix = value;
+                            groupManager.setGroup(group, prefix, suffix, priority, nameColor);
+                            updateAllPlayers();
+                            sendPrefix(sender, "<green>Suffix for group <white>" + group + "</white> set to: <white>" + value);
+                            return true;
+                        case "priority":
+                            try {
+                                priority = Integer.parseInt(value);
+                            } catch (NumberFormatException e) {
+                                sendPrefix(sender, "<red>Priority must be a number between 0 and 999.");
+                                return true;
+                            }
+                            if (priority < 0 || priority > 999) {
+                                sendPrefix(sender, "<red>Priority must be a number between 0 and 999.");
+                                return true;
+                            }
+                            groupManager.setGroup(group, prefix, suffix, priority, nameColor);
+                            updateAllPlayers();
+                            sendPrefix(sender, "<green>Priority for group <white>" + group + "</white> set to: <white>" + priority);
+                            return true;
+                        case "namecolor":
+                            nameColor = value;
+                            groupManager.setGroup(group, prefix, suffix, priority, nameColor);
+                            updateAllPlayers();
+                            sendPrefix(sender, "<green>Name color for group <white>" + group + "</white> set to: <white>" + value);
+                            return true;
+                        default:
+                            sendPrefix(sender, "<red>Unknown field: <white>" + field + "</white> (use prefix|suffix|priority|namecolor)");
+                            return true;
+                    }
+                }
+
+                case "clear": {
+                    require(sender, "simpleprefix.set");
+                    if (args.length < 3) {
+                        sendPrefix(sender, "<red>Usage: <white>/" + label + " clear <group> <prefix|suffix|namecolor>");
+                        return true;
+                    }
+                    String group = args[1];
+                    String field = args[2].toLowerCase(Locale.ROOT);
+
+                    GroupManager.GroupData current = groupManager.getGroup(group);
+                    if (current == null) {
+                        sendPrefix(sender, "<red>Group '<white>" + group + "</white>' not found in LuckPerms!");
+                        return true;
+                    }
+
+                    String prefix = current.prefix != null ? current.prefix : "";
+                    String suffix = current.suffix != null ? current.suffix : "";
+                    int priority = current.priority;
+                    String nameColor = current.nameColor;
+
+                    switch (field) {
+                        case "prefix":
+                            groupManager.setGroup(group, "", suffix, priority, nameColor);
+                            updateAllPlayers();
+                            sendPrefix(sender, "<green>Prefix for group <white>" + group + "</white> cleared!");
+                            return true;
+                        case "suffix":
+                            groupManager.setGroup(group, prefix, "", priority, nameColor);
+                            updateAllPlayers();
+                            sendPrefix(sender, "<green>Suffix for group <white>" + group + "</white> cleared!");
+                            return true;
+                        case "namecolor":
+                            groupManager.setGroup(group, prefix, suffix, priority, null);
+                            updateAllPlayers();
+                            sendPrefix(sender, "<green>Name color for group <white>" + group + "</white> cleared!");
+                            return true;
+                        default:
+                            sendPrefix(sender, "<red>Unknown field: <white>" + field + "</white> (use prefix|suffix|namecolor)");
+                            return true;
+                    }
+                }
+
+                case "save": {
+                    require(sender, "simpleprefix.save");
+                    if (args.length < 2) {
+                        sendPrefix(sender, "<red>Usage: <white>/" + label + " save <group>");
+                        return true;
+                    }
+                    String group = args[1];
+                    groupManager.saveToConfig(group);
+                    sendPrefix(sender, "<green>Group <white>" + group + "</white> saved to config!");
+                    return true;
+                }
+
+                case "format": {
+                    require(sender, "simpleprefix.format");
+                    if (args.length < 2) {
+                        sendPrefix(sender, "<red>Usage: <white>/" + label + " format <chat|tab> [set <format...>|toggle]");
+                        return true;
+                    }
+                    String target = args[1].toLowerCase(Locale.ROOT);
+                    if (target.equals("chat")) {
+                        if (args.length == 2) {
+                            header(sender, "Chat Format");
+                            String format = configManager.getChatFormat();
+                            boolean enabled = configManager.isChatFormatEnabled();
+                            sendPrefix(sender, "<gray>Status: <white>" + (enabled ? "Enabled" : "Disabled"));
+                            sendPrefix(sender, "<gray>Format: <white>" + format);
+                            return true;
+                        }
+                        if (args.length >= 3 && args[2].equalsIgnoreCase("set")) {
+                            if (args.length < 4) {
+                                sendPrefix(sender, "<red>Usage: <white>/" + label + " format chat set <format...>");
+                                return true;
+                            }
+                            String format = join(args, 3);
+                            configManager.setChatFormat(format);
+                            sendPrefix(sender, "<green>Chat format set to: <white>" + format);
+                            return true;
+                        }
+                        if (args.length >= 3 && args[2].equalsIgnoreCase("toggle")) {
+                            boolean current = configManager.isChatFormatEnabled();
+                            configManager.setChatEnabled(!current);
+                            sendPrefix(sender, "<green>Chat format " + (!current ? "enabled" : "disabled") + "!");
+                            return true;
+                        }
+                        sendPrefix(sender, "<red>Usage: <white>/" + label + " format chat [set <format...>|toggle]");
+                        return true;
+                    } else if (target.equals("tab")) {
+                        if (args.length == 2) {
+                            header(sender, "Tab Format");
+                            String format = configManager.getTabFormat();
+                            boolean enabled = configManager.isTabFormatEnabled();
+                            sendPrefix(sender, "<gray>Status: <white>" + (enabled ? "Enabled" : "Disabled"));
+                            sendPrefix(sender, "<gray>Format: <white>" + format);
+                            return true;
+                        }
+                        if (args.length >= 3 && args[2].equalsIgnoreCase("set")) {
+                            if (args.length < 4) {
+                                sendPrefix(sender, "<red>Usage: <white>/" + label + " format tab set <format...>");
+                                return true;
+                            }
+                            String format = join(args, 3);
+                            configManager.setTabFormat(format);
+                            updateAllPlayers();
+                            sendPrefix(sender, "<green>Tab format set to: <white>" + format);
+                            return true;
+                        }
+                        if (args.length >= 3 && args[2].equalsIgnoreCase("toggle")) {
+                            boolean current = configManager.isTabFormatEnabled();
+                            configManager.setTabEnabled(!current);
+                            updateAllPlayers();
+                            sendPrefix(sender, "<green>Tab format " + (!current ? "enabled" : "disabled") + "!");
+                            return true;
+                        }
+                        sendPrefix(sender, "<red>Usage: <white>/" + label + " format tab [set <format...>|toggle]");
+                        return true;
+                    } else {
+                        sendPrefix(sender, "<red>Unknown format target: <white>" + target + "</white> (use chat|tab)");
+                        return true;
+                    }
+                }
+
+                case "migrate": {
+                    require(sender, "simpleprefix.migrate");
+                    if (args.length < 2 || !args[1].equalsIgnoreCase("luckprefix")) {
+                        sendPrefix(sender, "<red>Usage: <white>/" + label + " migrate luckprefix");
+                        return true;
+                    }
+                    header(sender, "LuckPrefix Migration");
+                    sendPrefix(sender, "<gray>Starting migration from LuckPrefix...");
+                    Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+                        MigrationManager.MigrationResult result = migrationManager.migrateLuckPrefix();
+                        Bukkit.getScheduler().runTask(plugin, () -> {
+                            if (!result.success) {
+                                sendPrefix(sender, "<red>" + result.message);
+                                return;
+                            }
+                            sendPrefix(sender, "<green>" + result.message);
+                            sender.sendMessage("");
+                            if (!result.details.isEmpty()) {
+                                sendMM(sender, "▸ Migration Details");
+                                for (Map.Entry<String, String> e : result.details.entrySet()) {
+                                    String status = e.getValue();
+                                    String color = status.startsWith("✓") ? "<green>" : "<yellow>";
+                                    sendPrefix(sender, color + " • " + e.getKey() + " → " + status);
+                                }
+                            }
+                            sender.sendMessage("");
+                            sendPrefix(sender, "<gray>Migration complete! Updating all players...");
+                            updateAllPlayers();
+                            Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                                sendPrefix(sender, "<green>All players updated successfully!");
+                            }, 20L);
+                        });
+                    });
+                    return true;
+                }
+
+                case "cleanup": {
+                    require(sender, "simpleprefix.cleanup");
+                    header(sender, "Group Cleanup");
+                    sendPrefix(sender, "<gray>Cleaning up empty groups...");
+                    Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+                        MigrationManager.MigrationResult result = migrationManager.cleanupEmptyGroups();
+                        Bukkit.getScheduler().runTask(plugin, () -> {
+                            if (result.migratedCount == 0) {
+                                sendPrefix(sender, "<yellow>" + result.message);
+                                return;
+                            }
+                            sendPrefix(sender, "<green>" + result.message);
+                            sender.sendMessage("");
+                            if (!result.details.isEmpty()) {
+                                sendMM(sender, "▸ Removed Groups");
+                                for (String groupName : result.details.keySet()) {
+                                    sendPrefix(sender, "<yellow> • " + groupName);
+                                }
+                            }
+                            sender.sendMessage("");
+                            sendPrefix(sender, "<gray>Cleanup complete! Updating all players...");
+                            updateAllPlayers();
+                            Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                                sendPrefix(sender, "<green>All players updated successfully!");
+                            }, 20L);
+                        });
+                    });
+                    return true;
+                }
+
+                default:
+                    showHelp(sender);
+                    return true;
+            }
+        } catch (NoPermission ignored) {
+            return true;
+        } catch (Throwable t) {
+            sendPrefix(sender, "<red>An internal error occurred. See console.");
+            t.printStackTrace();
+            return true;
+        }
     }
 
-    private CompletableFuture<Suggestions> suggestGroups(CommandContext<CommandSourceStack> context, SuggestionsBuilder builder) {
-        Map<String, GroupManager.GroupData> groups = groupManager.getAllGroups();
-
-        for (String groupName : groups.keySet()) {
-            builder.suggest(groupName);
-        }
-
-        return builder.buildFuture();
+    private void showHelp(CommandSender sender) {
+        sendMM(sender, "&8╔═════════════════════════════════╗");
+        sendMM(sender, " " + prefix);
+        sendMM(sender, "&8╚═════════════════════════════════╝");
+        sender.sendMessage("");
+        sendPrefix(sender, "<#FFA07A>/" + "sp" + " reload - Reload configs");
+        sendPrefix(sender, "<#FFA07A>/" + "sp" + " update [player] - Update teams");
+        sendPrefix(sender, "<#FFA07A>/" + "sp" + " list - Show all groups");
+        sendPrefix(sender, "<#FFA07A>/" + "sp" + " create - Create group");
+        sendPrefix(sender, "<#FFA07A>/" + "sp" + " delete - Delete group");
+        sendPrefix(sender, "<#FFA07A>/" + "sp" + " migrate luckprefix - Migrate from LuckPrefix");
+        sendPrefix(sender, "<#FFA07A>/" + "sp" + " cleanup - Remove empty groups");
+        sender.sendMessage("");
+        sendMM(sender, "▸ Group Management");
+        sendPrefix(sender, "<#FFA07A>/" + "sp" + " set prefix - Set prefix");
+        sendPrefix(sender, "<#FFA07A>/" + "sp" + " set suffix - Set suffix");
+        sendPrefix(sender, "<#FFA07A>/" + "sp" + " set priority - Set priority");
+        sendPrefix(sender, "<#FFA07A>/" + "sp" + " set namecolor - Set name color");
+        sendPrefix(sender, "<#FFA07A>/" + "sp" + " clear prefix - Clear prefix");
+        sendPrefix(sender, "<#FFA07A>/" + "sp" + " clear suffix - Clear suffix");
+        sendPrefix(sender, "<#FFA07A>/" + "sp" + " clear namecolor - Clear name color");
+        sendPrefix(sender, "<#FFA07A>/" + "sp" + " save - Save to config");
+        sender.sendMessage("");
+        sendMM(sender, "▸ Format Management");
+        sendPrefix(sender, "<#FFA07A>/" + "sp" + " format chat - Show chat format");
+        sendPrefix(sender, "<#FFA07A>/" + "sp" + " format chat set - Set format");
+        sendPrefix(sender, "<#FFA07A>/" + "sp" + " format chat toggle - Toggle chat");
+        sendPrefix(sender, "<#FFA07A>/" + "sp" + " format tab - Show tab format");
+        sendPrefix(sender, "<#FFA07A>/" + "sp" + " format tab set - Set format");
+        sendPrefix(sender, "<#FFA07A>/" + "sp" + " format tab toggle - Toggle tab");
     }
 
-    private CompletableFuture<Suggestions> suggestPlayers(CommandContext<CommandSourceStack> context, SuggestionsBuilder builder) {
-        for (Player player : Bukkit.getOnlinePlayers()) {
-            builder.suggest(player.getName());
+    private static String join(String[] a, int start) {
+        if (start >= a.length) return "";
+        return String.join(" ", Arrays.copyOfRange(a, start, a.length));
+    }
+
+    @Override
+    public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
+        List<String> empty = Collections.emptyList();
+        if (!sender.hasPermission("simpleprefix.use")) return empty;
+
+        if (args.length == 1) {
+            return filter(Arrays.asList("help", "reload", "update", "list", "create", "set", "clear", "delete", "save", "format", "migrate", "cleanup"), args[0]);
         }
 
-        return builder.buildFuture();
+        String a0 = args[0].toLowerCase(Locale.ROOT);
+
+        switch (a0) {
+            case "update":
+                if (args.length == 2) {
+                    return filter(Bukkit.getOnlinePlayers().stream().map(Player::getName).collect(Collectors.toList()), args[1]);
+                }
+                return empty;
+
+            case "create":
+
+                return empty;
+
+            case "set":
+                if (args.length == 2) {
+                    return filter(new ArrayList<>(groupManager.getAllGroups().keySet()), args[1]);
+                }
+                if (args.length == 3) {
+                    return filter(Arrays.asList("prefix", "suffix", "priority", "namecolor"), args[2]);
+                }
+                return empty;
+
+            case "clear":
+                if (args.length == 2) {
+                    return filter(new ArrayList<>(groupManager.getAllGroups().keySet()), args[1]);
+                }
+                if (args.length == 3) {
+                    return filter(Arrays.asList("prefix", "suffix", "namecolor"), args[2]);
+                }
+                return empty;
+
+            case "delete":
+            case "save":
+                if (args.length == 2) {
+                    return filter(new ArrayList<>(groupManager.getAllGroups().keySet()), args[1]);
+                }
+                return empty;
+
+            case "format":
+                if (args.length == 2) {
+                    return filter(Arrays.asList("chat", "tab"), args[1]);
+                }
+                if (args.length == 3) {
+                    return filter(Arrays.asList("set", "toggle"), args[2]);
+                }
+                return empty;
+
+            case "migrate":
+                if (args.length == 2) {
+                    return filter(Collections.singletonList("luckprefix"), args[1]);
+                }
+                return empty;
+
+            default:
+                return empty;
+        }
+    }
+
+    private static List<String> filter(List<String> options, String token) {
+        String t = token.toLowerCase(Locale.ROOT);
+        return options.stream()
+                .filter(s -> s.toLowerCase(Locale.ROOT).startsWith(t))
+                .collect(Collectors.toList());
+    }
+
+    private boolean isModern() {
+        String version = Bukkit.getBukkitVersion();
+        String[] parts = version.split("-")[0].split("\\.");
+
+        int major = Integer.parseInt(parts[0]);
+        int minor = Integer.parseInt(parts[1]);
+
+        return major > 1 || (major == 1 && minor >= 14);
     }
 }

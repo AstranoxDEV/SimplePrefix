@@ -5,31 +5,21 @@ import de.astranox.simpleprefix.handlers.ConfigWatcher;
 import de.astranox.simpleprefix.handlers.LuckPermsEventHandler;
 import de.astranox.simpleprefix.handlers.PlayerJoinHandler;
 import de.astranox.simpleprefix.managers.*;
-import io.papermc.paper.command.brigadier.Commands;
-import io.papermc.paper.plugin.lifecycle.event.LifecycleEventManager;
-import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents;
-import net.luckperms.api.LuckPerms;
-import net.luckperms.api.LuckPermsProvider;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.event.Listener;
-import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scoreboard.Scoreboard;
 
-import java.util.Arrays;
-
 public class SimplePrefix extends JavaPlugin implements Listener {
-
     private LuckPermsWrapper luckPermsWrapper;
     private Scoreboard scoreboard;
     private boolean useLuckPerms = false;
-
     private ConfigManager configManager;
     private GroupManager groupManager;
     private PermissionGroupResolver permissionGroupResolver;
     private TeamManager teamManager;
-    private ChatManager chatManager;
+    private TabChatManager chatManager;
     private MigrationManager migrationManager;
     private ConfigWatcher configWatcher;
     private LuckPermsEventHandler luckPermsEventHandler;
@@ -37,9 +27,7 @@ public class SimplePrefix extends JavaPlugin implements Listener {
     @Override
     public void onEnable() {
         initializeLuckPerms();
-
         scoreboard = Bukkit.getScoreboardManager().getMainScoreboard();
-
         initializeManagers();
         loadConfigurations();
         registerEvents();
@@ -59,7 +47,6 @@ public class SimplePrefix extends JavaPlugin implements Listener {
     public void onDisable() {
         stopWatchers();
         cleanupTeams();
-
         getLogger().info("SimplePrefix disabled!");
     }
 
@@ -86,8 +73,10 @@ public class SimplePrefix extends JavaPlugin implements Listener {
         configManager = new ConfigManager(this);
         groupManager = new GroupManager(this, luckPermsWrapper, useLuckPerms);
         permissionGroupResolver = new PermissionGroupResolver(this, groupManager);
-        teamManager = new TeamManager(this, luckPermsWrapper, scoreboard, configManager, groupManager, permissionGroupResolver, useLuckPerms);
-        chatManager = new ChatManager(this, luckPermsWrapper, configManager, groupManager, permissionGroupResolver, useLuckPerms);
+        teamManager = new TeamManager(this, luckPermsWrapper, scoreboard, configManager,
+                groupManager, permissionGroupResolver, useLuckPerms);
+        chatManager = new TabChatManager(this, luckPermsWrapper, configManager,
+                groupManager, permissionGroupResolver, useLuckPerms);
         migrationManager = new MigrationManager(this, groupManager, configManager);
     }
 
@@ -98,24 +87,24 @@ public class SimplePrefix extends JavaPlugin implements Listener {
 
     private void registerEvents() {
         getServer().getPluginManager().registerEvents(chatManager, this);
-
         PlayerJoinHandler joinHandler = new PlayerJoinHandler(this, teamManager, chatManager, configManager);
         getServer().getPluginManager().registerEvents(joinHandler, this);
 
         if (useLuckPerms && luckPermsWrapper != null) {
-            luckPermsEventHandler = new LuckPermsEventHandler(this, luckPermsWrapper, teamManager, chatManager, configManager, groupManager);
+            luckPermsEventHandler = new LuckPermsEventHandler(this, luckPermsWrapper, teamManager,
+                    chatManager, configManager, groupManager);
             luckPermsEventHandler.register();
         }
     }
 
     private void registerCommands() {
-        LifecycleEventManager<Plugin> manager = this.getLifecycleManager();
-        manager.registerEventHandler(LifecycleEvents.COMMANDS, event -> {
-            final Commands commands = event.registrar();
+        PrefixCommand prefixCommand = new PrefixCommand(this, configManager, groupManager,
+                teamManager, chatManager, migrationManager);
+        getCommand("simpleprefix").setExecutor(prefixCommand);
+        getCommand("simpleprefix").setTabCompleter(prefixCommand);
 
-            PrefixCommand prefixCommand = new PrefixCommand(this, configManager, groupManager, teamManager, chatManager, migrationManager);
-            commands.register(prefixCommand.buildCommand().build(), "SimplePrefix commands", Arrays.asList("simpleprefix", "sp"));
-        });
+        getCommand("sp").setExecutor(prefixCommand);
+        getCommand("sp").setTabCompleter(prefixCommand);
     }
 
     private void startWatchers() {
@@ -175,7 +164,7 @@ public class SimplePrefix extends JavaPlugin implements Listener {
         return teamManager;
     }
 
-    public ChatManager getChatManager() {
+    public TabChatManager getChatManager() {
         return chatManager;
     }
 

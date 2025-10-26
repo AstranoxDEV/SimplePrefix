@@ -1,5 +1,6 @@
+# This Plugin supports in Prefix an in Suffix MiniMessage or Legacy Color Codes
 groups:
   default:
-    prefix: "&8Player &7"
+    prefix: "&8[&7Player&8]&7 "
     suffix: ""
     priority: 0

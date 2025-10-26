@@ -2,7 +2,6 @@ package de.astranox.simpleprefix.handlers;
 
 import de.astranox.simpleprefix.SimplePrefix;
 import de.astranox.simpleprefix.managers.*;
-import net.luckperms.api.LuckPerms;
 import net.luckperms.api.event.EventBus;
 import net.luckperms.api.event.group.GroupDataRecalculateEvent;
 import net.luckperms.api.event.node.NodeAddEvent;
@@ -20,12 +19,12 @@ public class LuckPermsEventHandler {
     private final SimplePrefix plugin;
     private final LuckPermsWrapper luckPermsWrapper;
     private final TeamManager teamManager;
-    private final ChatManager chatManager;
+    private final TabChatManager chatManager;
     private final ConfigManager configManager;
     private final GroupManager groupManager;
 
     public LuckPermsEventHandler(SimplePrefix plugin, LuckPermsWrapper luckPermsWrapper, TeamManager teamManager,
-                                 ChatManager chatManager, ConfigManager configManager, GroupManager groupManager) {
+                                 TabChatManager chatManager, ConfigManager configManager, GroupManager groupManager) {
         this.plugin = plugin;
         this.luckPermsWrapper = luckPermsWrapper;
         this.teamManager = teamManager;
@@ -73,11 +72,13 @@ public class LuckPermsEventHandler {
             return;
         }
 
-        if (event.getTarget() instanceof User user) {
+        if (event.getTarget() instanceof User) {
+            User user = (User) event.getTarget();
             handleNodeChange(user.getUniqueId(), "Node added");
         }
 
-        if (event.getTarget() instanceof Group group) {
+        if (event.getTarget() instanceof Group) {
+            Group group = (Group) event.getTarget();
             handleGroupChange(group.getName(), "Node added to group", true);
         }
     }
@@ -87,11 +88,13 @@ public class LuckPermsEventHandler {
             return;
         }
 
-        if (event.getTarget() instanceof User user) {
+        if (event.getTarget() instanceof User) {
+            User user = (User) event.getTarget();
             handleNodeChange(user.getUniqueId(), "Node removed");
         }
 
-        if (event.getTarget() instanceof Group group) {
+        if (event.getTarget() instanceof Group) {
+            Group group = (Group) event.getTarget();
             handleGroupChange(group.getName(), "Node removed from group", true);
         }
     }

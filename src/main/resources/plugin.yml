@@ -1,0 +1,54 @@
+name: SimplePrefix
+version: 1.0.0
+main: de.astranox.simpleprefix.SimplePrefix
+api-version: 1.13
+author: Astranox
+description: Prefix and suffix management for Spigot
+softdepend: [LuckPerms]
+
+commands:
+  simpleprefix:
+    description: Main SimplePrefix command
+    usage: /<command> [args]
+    aliases: [sp]
+  sp:
+    description: Alias for simpleprefix
+    usage: /<command> [args]
+
+permissions:
+  simpleprefix.use:
+    description: Allows use of basic commands
+    default: op
+  simpleprefix.reload:
+    description: Allows reloading the config
+    default: op
+  simpleprefix.create:
+    description: Allows creating groups
+    default: op
+  simpleprefix.set:
+    description: Allows setting group properties
+    default: op
+  simpleprefix.delete:
+    description: Allows deleting groups
+    default: op
+  simpleprefix.update:
+    description: Allows updating player teams
+    default: op
+  simpleprefix.list:
+    description: Allows listing groups
+    default: op
+  simpleprefix.save:
+    description: Allows saving groups
+    default: op
+  simpleprefix.format:
+    description: Allows changing formats
+    default: op
+  simpleprefix.migrate:
+    description: Allows migration commands
+    default: op
+  simpleprefix.cleanup:
+    description: Allows cleanup commands
+    default: op
+  simpleprefix.group.*:
+    description: Permission-based group assignment
+    default: false

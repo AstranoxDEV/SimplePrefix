@@ -3,9 +3,9 @@ package de.astranox.simpleprefix.util;
 import de.astranox.simpleprefix.SimplePrefix;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 
 public class ComponentParser {
-
     private final SimplePrefix plugin;
     private final MiniMessage miniMessage;
 
@@ -14,21 +14,24 @@ public class ComponentParser {
         this.miniMessage = MiniMessage.miniMessage();
     }
 
-    public Component parse(String text) {
-        if (text == null || text.isEmpty()) {
-            return Component.empty();
-        }
+    public String parse(String text) {
+        if (text == null || text.isEmpty()) return "";
 
         try {
-            text = text.replaceAll("<color:(#[0-9A-Fa-f]{6})>", "<$1>");
-            text = text.replaceAll("<colour:(#[0-9A-Fa-f]{6})>", "<$1>");
+            Component component = miniMessage.deserialize(text);
+            String legacy = LegacyComponentSerializer.legacySection().serialize(component);
 
-            return miniMessage.deserialize(text);
+            if (VersionUtil.isLegacyVersion()) {
 
+                legacy = legacy.replaceAll("(?i)(§x(§[0-9A-F]){6})", "");
+                legacy = legacy.replaceAll("(?i)§[lmnok]", "");
+            }
+
+            return BukkitColor.apply(legacy);
         } catch (Exception e) {
-            plugin.getLogger().warning("Error parsing formatting: " + text);
+            plugin.getLogger().warning("ComponentParser error for: " + text);
             e.printStackTrace();
-            return Component.text(text.replaceAll("<[^>]*>", ""));
+            return text.replaceAll("<[^>]*>", "");
         }
     }
 }
