@@ -5,11 +5,15 @@ import de.astranox.simpleprefix.handlers.ConfigWatcher;
 import de.astranox.simpleprefix.handlers.LuckPermsEventHandler;
 import de.astranox.simpleprefix.handlers.PlayerJoinHandler;
 import de.astranox.simpleprefix.managers.*;
+import de.astranox.simpleprefix.update.UpdateChecker;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.event.Listener;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scoreboard.Scoreboard;
+
+import java.io.File;
+import java.util.logging.Level;
 
 public class SimplePrefix extends JavaPlugin implements Listener {
     private LuckPermsWrapper luckPermsWrapper;
@@ -24,6 +28,8 @@ public class SimplePrefix extends JavaPlugin implements Listener {
     private ConfigWatcher configWatcher;
     private LuckPermsEventHandler luckPermsEventHandler;
 
+    private UpdateChecker updateChecker;
+
     @Override
     public void onEnable() {
         initializeLuckPerms();
@@ -34,6 +40,11 @@ public class SimplePrefix extends JavaPlugin implements Listener {
         registerCommands();
         startWatchers();
         initializePlayers();
+
+        cleanupOldVersions();
+
+        updateChecker = new UpdateChecker(this);
+        Bukkit.getScheduler().runTaskLaterAsynchronously(this, () -> updateChecker.checkForUpdates(), 40L);
 
         if (useLuckPerms) {
             getLogger().info("SimplePrefix enabled with LuckPerms integration!");
@@ -73,10 +84,9 @@ public class SimplePrefix extends JavaPlugin implements Listener {
         configManager = new ConfigManager(this);
         groupManager = new GroupManager(this, luckPermsWrapper, useLuckPerms);
         permissionGroupResolver = new PermissionGroupResolver(this, groupManager);
-        teamManager = new TeamManager(this, luckPermsWrapper, scoreboard, configManager,
-                groupManager, permissionGroupResolver, useLuckPerms);
+        teamManager = new TeamManager(this, luckPermsWrapper, configManager, groupManager, permissionGroupResolver);
         chatManager = new TabChatManager(this, luckPermsWrapper, configManager,
-                groupManager, permissionGroupResolver, useLuckPerms);
+                groupManager, permissionGroupResolver);
         migrationManager = new MigrationManager(this, groupManager, configManager);
     }
 
@@ -121,22 +131,62 @@ public class SimplePrefix extends JavaPlugin implements Listener {
     private void initializePlayers() {
         Bukkit.getScheduler().runTaskLater(this, () -> {
             for (Player player : Bukkit.getOnlinePlayers()) {
-                teamManager.updatePlayerTeam(player);
-                chatManager.updatePlayerListName(player);
+                teamManager.updatePlayer(player);
             }
         }, 20L);
     }
 
     private void cleanupTeams() {
         for (Player player : Bukkit.getOnlinePlayers()) {
-            teamManager.removePlayerTeam(player);
+            teamManager.removePlayer(player);
         }
     }
 
     public void updateAllPlayers() {
         for (Player player : Bukkit.getOnlinePlayers()) {
-            teamManager.updatePlayerTeam(player);
-            chatManager.updatePlayerListName(player);
+            teamManager.updatePlayer(player);
+        }
+    }
+
+    private void cleanupOldVersions() {
+        File pluginsDir = getDataFolder().getParentFile();
+
+        File[] filesToDelete = pluginsDir.listFiles((dir, name) ->
+                name.startsWith("SimplePrefix") &&
+                        (name.endsWith(".old") || name.contains(".DELETE_ON_RESTART"))
+        );
+
+        if (filesToDelete != null && filesToDelete.length > 0) {
+            for (File file : filesToDelete) {
+                try {
+                    String originalName = file.getName()
+                            .replace(".old", "")
+                            .replace(".DELETE_ON_RESTART", "");
+
+                    File original = new File(pluginsDir, originalName);
+
+                    if (file.getName().contains(".DELETE_ON_RESTART")) {
+                        file.delete();
+
+                        if (original.exists()) {
+                            boolean deleted = original.delete();
+                            if (deleted) {
+                                getLogger().info("Removed old version: " + original.getName());
+                            } else {
+                                getLogger().warning("Could not remove old version: " + original.getName());
+                            }
+                        }
+                    }
+                    else if (file.getName().endsWith(".old")) {
+                        boolean deleted = file.delete();
+                        if (deleted) {
+                            getLogger().info("Cleaned up backup: " + file.getName());
+                        }
+                    }
+                } catch (Exception e) {
+                    getLogger().log(Level.WARNING, "Failed to cleanup: " + file.getName(), e);
+                }
+            }
         }
     }
 
@@ -174,5 +224,9 @@ public class SimplePrefix extends JavaPlugin implements Listener {
 
     public ConfigWatcher getConfigWatcher() {
         return configWatcher;
+    }
+
+    public UpdateChecker getUpdateChecker() {
+        return updateChecker;
     }
 }

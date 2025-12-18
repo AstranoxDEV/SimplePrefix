@@ -6,6 +6,11 @@ settings:
   auto-update:
     enabled: true
 
+  update-check:
+    enabled: true
+    interval: 86400
+    channel: stable
+
   join-delay: 20
   team-prefix: "lp_"
   debug: false

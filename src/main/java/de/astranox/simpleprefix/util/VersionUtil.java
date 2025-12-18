@@ -17,14 +17,16 @@ public final class VersionUtil {
         MINOR_VERSION = parseIntSafe(parts, 1, 8);
     }
 
-    private VersionUtil() {}
+    private VersionUtil() {
+    }
 
     private static int parseIntSafe(String[] parts, int idx, int fallback) {
         try {
             if (idx < parts.length) {
                 return Integer.parseInt(parts[idx]);
             }
-        } catch (NumberFormatException ignored) {}
+        } catch (NumberFormatException ignored) {
+        }
         return fallback;
     }
 

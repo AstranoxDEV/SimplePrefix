@@ -14,15 +14,15 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 public class ConfigWatcher {
 
+    private static final long DEBOUNCE_TIME = 1000; // 1 Sekunde
     private final SimplePrefix plugin;
     private final ConfigManager configManager;
     private final GroupManager groupManager;
     private final TeamManager teamManager;
+    private final Map<String, Long> lastModified = new HashMap<>();
+    private final AtomicBoolean isSaving = new AtomicBoolean(false);
     private WatchService watchService;
     private Thread watchThread;
-    private final Map<String, Long> lastModified = new HashMap<>();
-    private static final long DEBOUNCE_TIME = 1000; // 1 Sekunde
-    private final AtomicBoolean isSaving = new AtomicBoolean(false);
 
     public ConfigWatcher(SimplePrefix plugin, ConfigManager configManager,
                          GroupManager groupManager, TeamManager teamManager) {

@@ -1,5 +1,5 @@
 name: SimplePrefix
-version: 1.0.0
+version: ${project.version}
 main: de.astranox.simpleprefix.SimplePrefix
 api-version: 1.13
 author: Astranox

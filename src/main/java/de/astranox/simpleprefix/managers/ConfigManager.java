@@ -1,6 +1,7 @@
 package de.astranox.simpleprefix.managers;
 
 import de.astranox.simpleprefix.SimplePrefix;
+import de.astranox.simpleprefix.update.UpdateChannel;
 import org.bukkit.configuration.file.FileConfiguration;
 
 import java.io.File;
@@ -99,6 +100,24 @@ public class ConfigManager {
 
     public void setTabEnabled(boolean enabled) {
         config.set("formats.tab.enabled", enabled);
+        saveConfig();
+    }
+
+    public boolean isUpdateCheckEnabled() {
+        return config.getBoolean("settings.update-check.enabled", true);
+    }
+
+    public int getUpdateCheckInterval() {
+        return config.getInt("settings.update-check.interval", 86400);
+    }
+
+    public UpdateChannel getUpdateChannel() {
+        String channel = config.getString("settings.update-check.channel", "stable");
+        return UpdateChannel.fromString(channel);
+    }
+
+    public void setUpdateChannel(UpdateChannel channel) {
+        config.set("settings.update-check.channel", channel.name().toLowerCase());
         saveConfig();
     }
 

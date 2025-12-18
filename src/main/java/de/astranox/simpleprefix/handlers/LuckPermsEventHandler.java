@@ -58,8 +58,7 @@ public class LuckPermsEventHandler {
                 return;
             }
 
-            teamManager.updatePlayerTeam(player);
-            chatManager.updatePlayerListName(player);
+            teamManager.updatePlayer(player);
 
             if (configManager.isDebugEnabled()) {
                 plugin.getLogger().info("Auto-updated " + player.getName() + " (Data recalculated)");
@@ -115,8 +114,7 @@ public class LuckPermsEventHandler {
                 return;
             }
 
-            teamManager.updatePlayerTeam(player);
-            chatManager.updatePlayerListName(player);
+            teamManager.updatePlayer(player);
 
             if (configManager.isDebugEnabled()) {
                 plugin.getLogger().info("Auto-updated " + player.getName() + " (" + reason + ")");
@@ -147,8 +145,7 @@ public class LuckPermsEventHandler {
                     continue;
                 }
 
-                teamManager.updatePlayerTeam(player);
-                chatManager.updatePlayerListName(player);
+                teamManager.updatePlayer(player);
                 updatedCount++;
             }
 

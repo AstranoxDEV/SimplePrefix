@@ -1,21 +1,17 @@
 package de.astranox.simpleprefix.commands;
 
 import de.astranox.simpleprefix.SimplePrefix;
-import de.astranox.simpleprefix.managers.TabChatManager;
-import de.astranox.simpleprefix.managers.ConfigManager;
-import de.astranox.simpleprefix.managers.GroupManager;
-import de.astranox.simpleprefix.managers.MigrationManager;
-import de.astranox.simpleprefix.managers.TeamManager;
-
+import de.astranox.simpleprefix.managers.*;
+import de.astranox.simpleprefix.update.UpdateChannel;
+import de.astranox.simpleprefix.update.VersionInfo;
 import de.astranox.simpleprefix.util.ComponentParser;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
-
 import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
-import org.bukkit.command.TabCompleter;
 import org.bukkit.command.CommandSender;
+import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
 
 import java.util.*;
@@ -46,11 +42,23 @@ public class PrefixCommand implements CommandExecutor, TabCompleter {
         this.teamManager = teamManager;
         this.chatManager = chatManager;
         this.migrationManager = migrationManager;
-        if(isModern()) {
+        if (isModern()) {
             prefix = "<gray>「<gradient:#FFA07A:#FF6B9D>SimplePrefix</gradient><gray>」";
             return;
         }
         prefix = "&7「&6SimplePrefix&7」";
+    }
+
+    private static String join(String[] a, int start) {
+        if (start >= a.length) return "";
+        return String.join(" ", Arrays.copyOfRange(a, start, a.length));
+    }
+
+    private static List<String> filter(List<String> options, String token) {
+        String t = token.toLowerCase(Locale.ROOT);
+        return options.stream()
+                .filter(s -> s.toLowerCase(Locale.ROOT).startsWith(t))
+                .collect(Collectors.toList());
     }
 
     private void sendMM(CommandSender sender, String mini) {
@@ -75,8 +83,6 @@ public class PrefixCommand implements CommandExecutor, TabCompleter {
             throw new NoPermission();
         }
     }
-
-    private static class NoPermission extends Exception {}
 
     private void updateAllPlayers() {
         plugin.updateAllPlayers();
@@ -109,20 +115,109 @@ public class PrefixCommand implements CommandExecutor, TabCompleter {
 
                 case "update": {
                     require(sender, "simpleprefix.update");
+
+                    if (args.length >= 2 && args[1].equalsIgnoreCase("channel")) {
+                        if (args.length >= 3) {
+                            UpdateChannel channel = UpdateChannel.fromString(args[2]);
+                            plugin.getUpdateChecker().setUpdateChannel(channel);
+                            sendPrefix(sender, "<green>Update channel set to: <white>" + channel.getDisplayName());
+                            sendPrefix(sender, "<gray>Run <white>/sp update check <gray>to check for updates");
+                            return true;
+                        }
+                            UpdateChannel current = plugin.getUpdateChecker().getCurrentChannel();
+                            sendPrefix(sender, "<yellow>Current update channel: <white>" + current.getDisplayName());
+                            sendPrefix(sender, "<gray>Available channels:");
+                            sendPrefix(sender, "<white>• dev <gray>- All updates (dev, snapshot, stable)");
+                            sendPrefix(sender, "<white>• snapshot <gray>- Snapshot + Stable releases");
+                            sendPrefix(sender, "<white>• stable <gray>- Only stable releases");
+                        return true;
+                    }
+
+                    if (args.length >= 2 && args[1].equalsIgnoreCase("install")) {
+                        if (!plugin.getUpdateChecker().isUpdateAvailable()) {
+                            sendPrefix(sender, "<red>No update available!");
+                            return true;
+                        }
+
+                        boolean hotReload = args.length >= 3 && args[2].equalsIgnoreCase("--hot");
+
+                        if (hotReload) {
+                            header(sender, "Hot-Reload Update");
+                            sendPrefix(sender, "<red><bold>⚠ WARNING: Experimental feature!");
+                            sendPrefix(sender, "<yellow>Downloading and hot-reloading v" +
+                                    plugin.getUpdateChecker().getLatestVersionInfo().getVersion());
+                        } else {
+                            header(sender, "Update Installer");
+                            sendPrefix(sender, "<yellow>Downloading update v" +
+                                    plugin.getUpdateChecker().getLatestVersionInfo().getVersion() + "...");
+                        }
+
+                        plugin.getUpdateChecker().installUpdate(hotReload).thenAccept(result -> {
+                            Bukkit.getScheduler().runTask(plugin, () -> {
+                                if (result.isSuccess()) {
+                                    sendPrefix(sender, "<green>✓ " + result.getMessage());
+                                    if (!hotReload) {
+                                        sendPrefix(sender, "<gray>Old version backed up as .old");
+                                        sendPrefix(sender, "<gold><bold>Restart the server to apply!");
+                                    }
+                                } else {
+                                    sendPrefix(sender, "<red>✗ " + result.getMessage());
+                                }
+                            });
+                        });
+                        return true;
+                    }
+
+                    if (args.length >= 2 && args[1].equalsIgnoreCase("info")) {
+                        if (!plugin.getUpdateChecker().isUpdateAvailable()) {
+                            sendPrefix(sender, "<red>No update available!");
+                            sendPrefix(sender, "<gray>Current version: <white>" + plugin.getDescription().getVersion());
+                            return true;
+                        }
+
+                        VersionInfo info = plugin.getUpdateChecker().getLatestVersionInfo();
+                        header(sender, "Update Information");
+                        sendPrefix(sender, "<yellow>Current: <gray>" + plugin.getDescription().getVersion());
+                        sendPrefix(sender, "<yellow>Latest: <green>" + info.getVersion());
+                        sendPrefix(sender, "");
+                        sendPrefix(sender, "<yellow>Download: <aqua>" + info.getDownloadUrl());
+                        sendPrefix(sender, "");
+                        sendPrefix(sender, "<gold>Run <white>/sp update install <gold>to download");
+                        return true;
+                    }
+
+                    if (args.length >= 2 && args[1].equalsIgnoreCase("check")) {
+                        sendPrefix(sender, "<yellow>Checking for updates...");
+                        plugin.getUpdateChecker().resetNotifications();
+                        plugin.getUpdateChecker().checkForUpdates();
+
+                        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                            if (plugin.getUpdateChecker().isUpdateAvailable()) {
+                                sendPrefix(sender, "<green>Update available: v" +
+                                        plugin.getUpdateChecker().getLatestVersionInfo().getVersion());
+                                sendPrefix(sender, "<gold>Run <white>/sp update install <gold>to download");
+                                return;
+                            }
+                            sendPrefix(sender, "<green>You are running the latest version!");
+                        }, 40L);
+                        return true;
+                    }
+
                     if (args.length == 1) {
                         updateAllPlayers();
                         sendPrefix(sender, "<green>All players updated!");
                         return true;
                     }
+
                     String playerName = args[1];
                     Player p = Bukkit.getPlayerExact(playerName);
                     if (p == null) {
                         sendPrefix(sender, "<red>Player not found!");
                         return true;
                     }
-                    teamManager.updatePlayerTeam(p);
-                    chatManager.updatePlayerListName(p);
-                    sendPrefix(sender, "<green>Updated player: <white>" + p.getName());
+
+                    teamManager.updatePlayer(p);
+                    sendPrefix(sender, "<green>Updated player: " + p.getName());
                     return true;
                 }
 
@@ -512,11 +607,6 @@ public class PrefixCommand implements CommandExecutor, TabCompleter {
         sendPrefix(sender, "<#FFA07A>/" + "sp" + " format tab toggle - Toggle tab");
     }
 
-    private static String join(String[] a, int start) {
-        if (start >= a.length) return "";
-        return String.join(" ", Arrays.copyOfRange(a, start, a.length));
-    }
-
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         List<String> empty = Collections.emptyList();
@@ -531,7 +621,21 @@ public class PrefixCommand implements CommandExecutor, TabCompleter {
         switch (a0) {
             case "update":
                 if (args.length == 2) {
-                    return filter(Bukkit.getOnlinePlayers().stream().map(Player::getName).collect(Collectors.toList()), args[1]);
+                    List<String> opts = new ArrayList<>();
+                    opts.add("install");
+                    opts.add("info");
+                    opts.add("check");
+                    opts.add("channel");
+                    opts.addAll(Bukkit.getOnlinePlayers().stream()
+                            .map(Player::getName)
+                            .collect(Collectors.toList()));
+                    return filter(opts, args[1]);
+                }
+                if (args.length == 3 && args[1].equalsIgnoreCase("channel")) {
+                    return filter(Arrays.asList("dev", "snapshot", "stable"), args[2]);
+                }
+                if (args.length == 3 && args[1].equalsIgnoreCase("install")) {
+                    return filter(Collections.singletonList("--hot"), args[2]);
                 }
                 return empty;
 
@@ -584,13 +688,6 @@ public class PrefixCommand implements CommandExecutor, TabCompleter {
         }
     }
 
-    private static List<String> filter(List<String> options, String token) {
-        String t = token.toLowerCase(Locale.ROOT);
-        return options.stream()
-                .filter(s -> s.toLowerCase(Locale.ROOT).startsWith(t))
-                .collect(Collectors.toList());
-    }
-
     private boolean isModern() {
         String version = Bukkit.getBukkitVersion();
         String[] parts = version.split("-")[0].split("\\.");
@@ -599,5 +696,8 @@ public class PrefixCommand implements CommandExecutor, TabCompleter {
         int minor = Integer.parseInt(parts[1]);
 
         return major > 1 || (major == 1 && minor >= 14);
+    }
+
+    private static class NoPermission extends Exception {
     }
 }

@@ -1,11 +1,6 @@
 package de.astranox.simpleprefix.managers;
 
 import de.astranox.simpleprefix.SimplePrefix;
-import net.luckperms.api.LuckPerms;
-import net.luckperms.api.model.group.Group;
-import net.luckperms.api.node.NodeType;
-import net.luckperms.api.node.types.PrefixNode;
-import net.luckperms.api.node.types.SuffixNode;
 import org.bukkit.Bukkit;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;

@@ -6,7 +6,7 @@
 
     <groupId>de.astranox</groupId>
     <artifactId>SimplePrefix</artifactId>
-    <version>1.0.0-STABLE</version>
+    <version>1.0.1</version>
     <packaging>jar</packaging>
 
     <name>SimplePrefix</name>
@@ -20,6 +20,10 @@
     </properties>
 
     <repositories>
+        <repository>
+            <id>central-snapshots</id>
+            <url>https://central.sonatype.com/repository/maven-snapshots/</url>
+        </repository>
         <repository>
             <id>papermc-repo</id>
             <url>https://repo.papermc.io/repository/maven-public/</url>
@@ -69,6 +73,9 @@
             <resource>
                 <directory>src/main/resources</directory>
                 <filtering>true</filtering>
+                <includes>
+                    <include>plugin.yml</include>
+                </includes>
             </resource>
         </resources>
     </build>
@@ -89,6 +96,11 @@
             <groupId>net.kyori</groupId>
             <artifactId>adventure-text-serializer-legacy</artifactId>
             <version>4.25.0</version>
+        </dependency>
+        <dependency>
+            <groupId>net.kyori</groupId>
+            <artifactId>adventure-text-serializer-bungeecord</artifactId>
+            <version>4.4.1</version>
         </dependency>
         <dependency>
             <groupId>net.luckperms</groupId>

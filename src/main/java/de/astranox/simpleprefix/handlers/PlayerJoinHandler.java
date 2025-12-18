@@ -1,8 +1,8 @@
 package de.astranox.simpleprefix.handlers;
 
 import de.astranox.simpleprefix.SimplePrefix;
-import de.astranox.simpleprefix.managers.TabChatManager;
 import de.astranox.simpleprefix.managers.ConfigManager;
+import de.astranox.simpleprefix.managers.TabChatManager;
 import de.astranox.simpleprefix.managers.TeamManager;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
@@ -32,8 +32,7 @@ public class PlayerJoinHandler implements Listener {
         Player player = event.getPlayer();
 
         Bukkit.getScheduler().runTaskLater(plugin, () -> {
-            teamManager.updatePlayerTeam(player);
-            chatManager.updatePlayerListName(player);
+            teamManager.updatePlayer(player);
 
             if (configManager.isDebugEnabled()) {
                 plugin.getLogger().info("Initialized " + player.getName() + " on join");
@@ -43,7 +42,7 @@ public class PlayerJoinHandler implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onPlayerQuit(PlayerQuitEvent event) {
-        teamManager.removePlayerTeam(event.getPlayer());
+        teamManager.removePlayer(event.getPlayer());
 
         if (configManager.isDebugEnabled()) {
             plugin.getLogger().info("Cleaned up team for " + event.getPlayer().getName());
