@@ -19,10 +19,15 @@ public class ConfigManager {
     }
 
     public void loadConfigs() {
-        plugin.saveDefaultConfig();
-        config = plugin.getConfig();
+        if (!plugin.getDataFolder().exists()) {
+            plugin.getDataFolder().mkdirs();
+        }
         configFile = new File(plugin.getDataFolder(), "config.yml");
         lastModified = configFile.lastModified();
+        if(!configFile.exists()) {
+            plugin.saveDefaultConfig();
+        }
+        config = plugin.getConfig();
     }
 
     public void reloadConfig() {

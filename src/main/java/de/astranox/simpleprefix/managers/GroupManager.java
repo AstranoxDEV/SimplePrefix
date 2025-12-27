@@ -8,6 +8,8 @@ import org.bukkit.configuration.file.YamlConfiguration;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -27,9 +29,12 @@ public class GroupManager {
     }
 
     public void loadGroups() {
+        if (!plugin.getDataFolder().exists()) {
+            plugin.getDataFolder().mkdirs();
+        }
         groupsFile = new File(plugin.getDataFolder(), "groups.yml");
 
-        if (!groupsFile.exists()) {
+        if(!groupsFile.exists()) {
             plugin.saveResource("groups.yml", false);
         }
 

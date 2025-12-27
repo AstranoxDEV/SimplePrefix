@@ -6,7 +6,7 @@
 
     <groupId>de.astranox</groupId>
     <artifactId>SimplePrefix</artifactId>
-    <version>1.0.1</version>
+    <version>1.0.2</version>
     <packaging>jar</packaging>
 
     <name>SimplePrefix</name>
@@ -76,6 +76,13 @@
                 <includes>
                     <include>plugin.yml</include>
                 </includes>
+            </resource>
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>false</filtering>
+                <excludes>
+                    <exclude>plugin.yml</exclude>
+                </excludes>
             </resource>
         </resources>
     </build>
